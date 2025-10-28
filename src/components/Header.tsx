@@ -1,13 +1,12 @@
-import React from 'react';
-import { useNavigate } from 'react-router-dom';
-import { LogOut } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
-import Logo from '../assets/SmartMigrate.svg'
-
+import { LogOut } from "lucide-react";
+import React from "react";
+import { useNavigate } from "react-router-dom";
+import Logo from "../assets/SmartMigrate.svg";
+import { useAuth } from "../context/AuthContext";
 
 type HeaderProps = {
-    handleReset?: () => void;
-}
+  handleReset?: () => void;
+};
 
 const Header: React.FC<HeaderProps> = ({ handleReset }) => {
   const navigate = useNavigate();
@@ -15,7 +14,7 @@ const Header: React.FC<HeaderProps> = ({ handleReset }) => {
 
   const handleLogout = () => {
     logout();
-    navigate('/login');
+    navigate("/login");
   };
 
   return (
@@ -23,11 +22,13 @@ const Header: React.FC<HeaderProps> = ({ handleReset }) => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-28">
           <div className="flex items-center gap-3" onClick={handleReset}>
-            <img src={Logo} alt="logo" className='h-18'/>
+            <img src={Logo} alt="logo" className="h-18" />
           </div>
           <div className="flex items-center gap-4">
             <div className="hidden sm:block text-right">
-              <p className="text-sm text-gray-900 manrope-regular">{'Welcome, '+user?.name || 'User'}</p>
+              <p className="text-sm text-gray-900 manrope-regular">
+                {"Welcome, " + (user?.name || user?.email || "User")}
+              </p>
               {/* <p className="text-xs text-gray-500">{user?.email}</p> */}
             </div>
             <button

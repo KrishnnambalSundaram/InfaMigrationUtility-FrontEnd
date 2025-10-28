@@ -9,8 +9,8 @@ interface UploadResponse {
 interface ConvertedFileItem {
   original: string;
   converted: string;
-  javaContent: string;
-  csharpContent: string;
+  snowflakeContent: string;
+  oracleContent: string;
   targetFolder: string;
 }
 
@@ -27,7 +27,7 @@ interface FilePathResponse {
   jobId: string;
   analysis: {
     totalFiles: number;
-    csharpFiles: number;
+    oracleFiles: number;
     solutionName: string;
     linesOfCode: number;
     fileSize: string;

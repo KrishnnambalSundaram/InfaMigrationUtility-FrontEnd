@@ -1,5 +1,5 @@
 {
-  "name": "migration-accelerator",
+  "name": "oracle-to-snowflake-migration-accelerator",
   "private": true,
   "version": "0.0.0",
   "type": "module",

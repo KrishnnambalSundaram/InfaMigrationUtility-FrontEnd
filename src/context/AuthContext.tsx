@@ -1,82 +1,79 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import apiClient from '../api/apiClient';
+import React, { createContext, useContext, useEffect, useState } from "react";
+import apiClient from "../api/apiClient";
 
 interface User {
   email: string;
   name: string;
+  firstName?: string;
+  lastName?: string;
+  _id?: string;
+  role?: string;
 }
 
 interface AuthContextType {
   token: string;
   user: User | null;
   login: (email: string, password: string) => Promise<boolean>;
-  signup: (name: string, email: string, password: string, company: string) => Promise<boolean>;
   logout: () => void;
   isAuthenticated: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => {
   const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string>('');
-  const [isAuthenticated,setIsAuthenticated] = useState<boolean>(false)
+  const [token, setToken] = useState<string>("");
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   useEffect(() => {
     // Check if user is logged in (from localStorage)
-    const storedUser = localStorage.getItem('user');
-    const token = localStorage.getItem('token')
-    token?setToken(token):setToken('')
+    const storedUser = localStorage.getItem("user");
+    const token = localStorage.getItem("token");
+    token ? setToken(token) : setToken("");
     if (storedUser) {
-      setIsAuthenticated(true)
-      setUser(JSON.parse(storedUser));
+      const parsedUser = JSON.parse(storedUser);
+      // Process stored user data to ensure name field is properly set
+      const processedUser = {
+        ...parsedUser,
+        name: parsedUser.firstName || parsedUser.email || parsedUser.name,
+      };
+      setIsAuthenticated(true);
+      setUser(processedUser);
     }
   }, []);
 
-    const login = async (email: string, password: string): Promise<boolean> => {
+  const login = async (email: string, password: string): Promise<boolean> => {
     if (!email || !password) return false;
 
     try {
-        const response = await apiClient.post('/auth/login', { email, password });
-        console.log(response);
+      const response = await apiClient.post("/auth/login", { email, password });
+      console.log(response);
 
-        if (response.status === 200 || response.status === 201) {
-        setUser(response.data.user);
-        localStorage.setItem('user', JSON.stringify(response.data.user));
-        localStorage.setItem('token', response.data.token);
-        return true;
-        } else {
-        return false;
-        }
-    } catch (error) {
-        console.error('Login error:', error);
-        return false;
-    }
-    };
-  const signup = async (name: string, email: string, password: string, company: string): Promise<boolean> => {
-    if (!name || !email || !password || !company) return false;
-    try {
-        const userData = { email, name, password, company };
-        const response = await apiClient.post('/register/signup', userData);
-        console.log(response);
+      if (response.status === 200 || response.status === 201) {
+        // Create user object with name field from firstName only
+        const userData = {
+          ...response.data.user,
+          name: response.data.user.firstName || response.data.user.email,
+        };
 
-        if (response.status === 200 || response.status === 201) {
-        setUser(response.data.user || userData); // Use server response if available
-        localStorage.setItem('user', JSON.stringify(response.data.user || userData));
-        localStorage.setItem('token', response.data.token || "");
+        setUser(userData);
+        localStorage.setItem("user", JSON.stringify(userData));
+        localStorage.setItem("token", response.data.token);
         return true;
-        } else {
+      } else {
         return false;
-        }
+      }
     } catch (error) {
-        console.error('Signup error:', error);
-        return false;
+      console.error("Login error:", error);
+      return false;
     }
   };
 
   const logout = () => {
     setUser(null);
-    localStorage.removeItem('user');
-    localStorage.removeItem('token');
+    localStorage.removeItem("user");
+    localStorage.removeItem("token");
   };
 
   return (
@@ -85,7 +82,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         token,
         user,
         login,
-        signup,
         logout,
         isAuthenticated: isAuthenticated,
       }}
@@ -98,7 +94,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
 };

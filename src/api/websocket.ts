@@ -2,7 +2,7 @@ import { io, Socket } from "socket.io-client";
 
 // Auto-detect environment for better configuration
 const isDevelopment = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || (isDevelopment ? "http://localhost:8000" : window.location.origin);
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || (isDevelopment ? "http://localhost:3001" : window.location.origin);
 
 // Event types
 export interface ProgressStep {

@@ -1,9 +1,9 @@
+import { AlertCircle } from "lucide-react";
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { AlertCircle } from "lucide-react";
+import Background from "../assets/expleo-background.svg";
+import Logo from "../assets/SmartMigrate.svg";
 import { useAuth } from "../context/AuthContext";
-import Background from '../assets/expleo-background.svg';
-import Logo from '../assets/SmartMigrate.svg';
 
 const Login: React.FC = () => {
   const navigate = useNavigate();
@@ -34,10 +34,6 @@ const Login: React.FC = () => {
     }
   };
 
-  const handleSignup = () => {
-    navigate("/signup");
-  };
-
   return (
     <div className="min-h-screen w-screen flex flex-col md:flex-row bg-white text-[#555555]">
       {/* Left Illustration Section */}
@@ -51,8 +47,7 @@ const Login: React.FC = () => {
 
       {/* Right Login Form */}
       <div className="relative flex flex-1 min-w-[45%] items-center justify-center bg-white px-6 md:px-10">
-  <div className="absolute right-0 w-full max-w-md bg-[#FCFCFC] rounded-l-[32px] shadow-2xl p-8 md:p-10 overflow-auto h-screen">
-   
+        <div className="absolute right-0 w-full max-w-md bg-[#FCFCFC] rounded-l-[32px] shadow-2xl p-8 md:p-10 overflow-auto h-screen">
           <div className="flex items-center justify-center mb-4">
             <img src={Logo} alt="inflecto-logo" />
           </div>
@@ -100,18 +95,6 @@ const Login: React.FC = () => {
             >
               {loading ? "Signing in..." : "Login"}
             </button>
-
-            <p className="text-[#C2C2C2] text-center">or</p>
-
-            {/* Signup Redirect */}
-            <div className="text-center mt-4 border border-[#E46356] py-2.5 px-1 rounded-lg">
-              <p
-                className="text-[#E46356] font-bold cursor-pointer"
-                onClick={handleSignup}
-              >
-                Sign up
-              </p>
-            </div>
           </form>
         </div>
       </div>
