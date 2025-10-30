@@ -25,18 +25,14 @@ import {
 } from "../api/fileConvertAPI";
 import { connectSocket, disconnectSocket } from "../api/websocket";
 import analysing from "../assets/analysing.svg";
-import Classes from "../assets/classes.svg";
-import CodeLines from "../assets/code.svg";
 import done from "../assets/done.svg";
 import FinalSuccess from "../assets/final-success.svg";
-import Folder from "../assets/folder.svg";
 import processing from "../assets/processing.svg";
-import SqlFiles from "../assets/sqlfiles.svg";
-import Success from "../assets/success.svg";
-import Totalfile from "../assets/totalfile.svg";
-import Upload from "../assets/upload.webp";
 import Header from "../components/Header";
+import SingleEditorsPanel from "../components/SingleEditorsPanel";
+import ZipUploadPanel from "../components/ZipUploadPanel";
 import { useAuth } from "../context/AuthContext";
+import { countLines, formatBytes } from "../utils/format";
 import useBackHandler from "../utils/hooks/useBackHandler";
 
 type ConvertedFileItem = {
@@ -86,17 +82,7 @@ type TabKey = "idmc-sql" | "snowflake" | "idmc-batch" | "batch-human";
 
 type InputMode = "zip" | "single";
 
-const formatBytes = (bytes: number): string => {
-  if (bytes === 0) return "0 Bytes";
-  const k = 1024;
-  const sizes = ["Bytes", "KB", "MB", "GB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + " " + sizes[i];
-};
-
-const countLines = (content: string): number => {
-  return content.split("\n").length;
-};
+// moved to utils/format
 
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -709,264 +695,6 @@ const Dashboard: React.FC = () => {
     </button>
   );
 
-  const renderZipControls = () => (
-    <div className="space-y-6">
-      <div
-        className={`flex flex-col border rounded-xl p-8 sm:p-12 text-center items-center transition-all ${
-          dragActive
-            ? "border-[#70CBCF]/50 bg-blue-50"
-            : "border-[#70CBCF] hover:bg-green-50/40"
-        }`}
-        onDragEnter={handleDrag}
-        onDragLeave={handleDrag}
-        onDragOver={handleDrag}
-        onDrop={handleDrop}
-      >
-        <label className="cursor-pointer mt-5">
-          <img src={Upload} alt="upload" className="h-22" />
-          <input
-            type="file"
-            accept=".zip"
-            onChange={handleFileInput}
-            className="hidden"
-          />
-        </label>
-        <p className="text-md mt-2 font-semibold text-gray-600">
-          Drop your file here or Browse
-        </p>
-        <p className="text-xs text-gray-500 mt-2 mb-5">Supports ZIP files</p>
-      </div>
-
-      {/* Output format selector for IDMC */}
-
-      {selectedFile && fileStats && (
-        <div className="bg-gray-50">
-          <div className="flex flex-col p-5 shadow-xl rounded-xl sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
-            <div className="flex items-center gap-3">
-              <div className="mx-4 h-10 rounded-lg flex items-center justify-center">
-                <img src={Folder} alt="file" />
-              </div>
-              <div>
-                <h4 className="font-semibold text-lg text-gray-900">
-                  {selectedFile.name}
-                </h4>
-                <p className="text-sm text-gray-600">
-                  {formatBytes(selectedFile.size)}
-                </p>
-              </div>
-            </div>
-            <div className="mx-4 h-10 rounded-lg flex items-center justify-center">
-              <img src={Success} alt="success" />
-            </div>
-          </div>
-
-          {/* Stats */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6 ">
-            <div className="bg-[linear-gradient(135deg,_rgba(231,230,42,0.2)_0%,_rgba(220,252,231,0.1)_100%)] p-4 rounded-xl py-6 shadow-lg">
-              <div className="flex items-center gap-2 my-3 justify-center">
-                <img src={Totalfile} alt="files" />
-              </div>
-              <p className="text-2xl font-bold text-gray-900 text-center">
-                {fileStats.totalFilesinFile}
-              </p>
-              <p className="text-xs text-gray-500 text-center">Total files</p>
-            </div>
-
-            <div className="bg-[linear-gradient(135deg,_rgba(112,203,207,0.2)_0%,_rgba(219,234,254,0.1)_100%)] p-4 rounded-xl py-6 shadow-lg">
-              <div className="flex items-center gap-2 my-3 justify-center">
-                <img src={SqlFiles} alt="files" />
-              </div>
-              <p className="text-2xl font-bold text-gray-900 text-center">
-                {fileStats.totalFiles}
-              </p>
-              <p className="text-xs text-gray-500 text-center">
-                Scripts detected
-              </p>
-            </div>
-
-            <div className="bg-[linear-gradient(135deg,_rgba(185,120,178,0.2)_0%,_rgba(252,231,243,0.1)_100%)] p-4 rounded-xl py-6 shadow-lg">
-              <div className="flex items-center gap-2 my-3 justify-center">
-                <img src={CodeLines} alt="files" />
-              </div>
-              <p className="text-2xl font-bold text-gray-900 text-center">
-                {fileStats.totalLines.toLocaleString()}
-              </p>
-              <p className="text-xs text-gray-500 text-center">of code</p>
-            </div>
-
-            <div className="bg-[linear-gradient(135deg,_rgba(228,99,86,0.2)_0%,_rgba(255,237,212,0.1)_100%)] p-4 rounded-xl py-6 shadow-lg">
-              <div className="flex items-center gap-2 my-3 justify-center">
-                <img src={Classes} alt="files" />
-              </div>
-              <p className="text-2xl font-bold text-gray-900 text-center">
-                {formatBytes(fileStats.totalSize)}
-              </p>
-              <p className="text-xs text-gray-500 text-center">File size</p>
-            </div>
-          </div>
-
-          {/* File list */}
-          <div className="mb-6 rounded-2xl shadow-2xl p-5">
-            <h5 className="font-medium text-gray-900 mb-3">
-              {fileStats.totalFiles === 0
-                ? "No files to convert"
-                : "Files to Convert"}
-            </h5>
-            <div className="max-h-64 overflow-y-auto space-y-2">
-              {fileStats.files.map((file, idx) => (
-                <div
-                  key={idx}
-                  className="flex items-center justify-between bg-gray-50 hover:bg-gray-100 p-3 rounded-lg transition"
-                >
-                  <div className="flex items-center gap-2 flex-1 min-w-0">
-                    <img src={Folder} alt="file" className="h-5 px-2" />
-                    <span className="text-sm text-gray-900 truncate">
-                      {file.name}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-4 text-xs text-gray-600 ml-4">
-                    <span className="whitespace-nowrap">
-                      {file.lines} lines
-                    </span>
-                    <span className="px-2 border-l border-l-neutral-300 whitespace-nowrap">
-                      {formatBytes(file.size)}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <button
-            onClick={
-              selectedTab === "idmc-batch"
-                ? async () => {
-                    if (!uploadedFile?.path) return;
-                    try {
-                      setIsProcessing(true);
-                      const resp = await idmcBatch({
-                        inputType: "zip",
-                        zipFilePath: uploadedFile.path,
-                        // pass md/txt for batch outputs
-                        ...(batchOutputFormat
-                          ? { outputFormat: batchOutputFormat }
-                          : {}),
-                      });
-                      // If API returns a packaged zip filename, allow download
-                      if (resp?.zipFilename) {
-                        setConvertedFile({
-                          success: true,
-                          message: "completed",
-                          source: "idmc",
-                          jobId: "batch_zip",
-                          analysis: {
-                            totalFiles: fileStats.totalFiles,
-                            oracleFiles: 0,
-                            solutionName: "",
-                            linesOfCode: fileStats.totalLines,
-                            fileSize: formatBytes(fileStats.totalSize),
-                            namespaces: [],
-                            classes: 0,
-                            dependencies: [],
-                          },
-                          conversion: {
-                            totalConverted: fileStats.totalFiles,
-                            totalFiles: fileStats.totalFiles,
-                            successRate: 100,
-                            convertedFiles: [],
-                          },
-                          zipFilename: resp.zipFilename,
-                        });
-                        setCurrentPage("result");
-                      } else {
-                        // If no zip, just mark success
-                        setCurrentPage("success");
-                      }
-                    } catch (e) {
-                      setErrorMessage("Batch processing failed");
-                      setCurrentPage("error");
-                    } finally {
-                      setIsProcessing(false);
-                    }
-                  }
-                : handleZipConvert
-            }
-            className={`w-full py-3 sm:py-4 text-white rounded-lg transition font-semibold text-base shadow-l bg-[#E46356]`}
-          >
-            Start Conversion
-          </button>
-        </div>
-      )}
-    </div>
-  );
-
-  const renderSingleEditors = () => (
-    <div className="bg-white rounded-2xl shadow p-4 md:p-6">
-      {/* Output format for IDMC */}
-      <div className="flex flex-col md:flex-row gap-4 items-stretch">
-        <div className="flex-1 flex flex-col">
-          <input
-            value={singleFileName}
-            onChange={(e) => setSingleFileName(e.target.value)}
-            className="border rounded-md px-3 py-2 text-sm mb-2"
-            placeholder="file name (e.g. query.sql | run.sh)"
-          />
-          <textarea
-            value={singleSourceCode}
-            onChange={(e) => setSingleSourceCode(e.target.value)}
-            className="border rounded-md p-3 font-mono text-sm min-h-[320px] h-full"
-            placeholder={
-              isBatchHuman || selectedTab === "idmc-batch"
-                ? "Paste your .sh/.bat script here..."
-                : isSnowflakeTab
-                ? "Paste Oracle SQL/PLSQL here..."
-                : "Paste SQL for IDMC summary here (Oracle/Redshift)..."
-            }
-          />
-        </div>
-        <div className="flex-1 flex flex-col">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm text-gray-600">Output</span>
-            <div className="flex items-center gap-2">
-              {(singleOutputs.length > 0 ||
-                (singleResult && singleResult.trim().length > 0)) && (
-                <button
-                  onClick={handleSingleDownload}
-                  className="px-4 py-2 rounded-md border border-[#E46356] text-[#E46356] text-sm"
-                >
-                  Download
-                </button>
-              )}
-              <button
-                onClick={handleSingleConvert}
-                disabled={isConvertingSingle || !singleSourceCode}
-                className={`px-4 py-2 rounded-md text-white text-sm ${
-                  isConvertingSingle || !singleSourceCode
-                    ? "bg-[#E46356]/60"
-                    : "bg-[#E46356]"
-                }`}
-              >
-                {isConvertingSingle ? (
-                  <span className="inline-flex items-center gap-2">
-                    <Loader2 className="w-4 h-4 animate-spin" /> Converting
-                  </span>
-                ) : (
-                  "Convert"
-                )}
-              </button>
-            </div>
-          </div>
-          <textarea
-            value={singleResult}
-            readOnly
-            className="border rounded-md p-3 font-mono text-sm min-h-[320px] h-full bg-neutral-50"
-            placeholder="Converted output will appear here..."
-          />
-        </div>
-      </div>
-    </div>
-  );
-
   return (
     <div className="min-h-screen w-screen bg-gray-50 flex flex-col manrope-regular">
       <Header handleReset={() => handleReset()} />
@@ -1043,7 +771,85 @@ const Dashboard: React.FC = () => {
         {/* Content */}
         {currentPage === "upload" && (
           <div className="space-y-6">
-            {inputMode === "zip" ? renderZipControls() : renderSingleEditors()}
+            {inputMode === "zip" ? (
+              <ZipUploadPanel
+                dragActive={dragActive}
+                onDrag={handleDrag}
+                onDrop={handleDrop}
+                onFileInput={handleFileInput}
+                selectedFile={selectedFile}
+                fileStats={fileStats as any}
+                onStart={
+                  selectedTab === "idmc-batch"
+                    ? async () => {
+                        if (!uploadedFile?.path || !fileStats) return;
+                        try {
+                          setIsProcessing(true);
+                          const resp = await idmcBatch({
+                            inputType: "zip",
+                            zipFilePath: uploadedFile.path,
+                            ...(batchOutputFormat
+                              ? { outputFormat: batchOutputFormat }
+                              : {}),
+                          });
+                          if (resp?.zipFilename) {
+                            setConvertedFile({
+                              success: true,
+                              message: "completed",
+                              source: "idmc",
+                              jobId: "batch_zip",
+                              analysis: {
+                                totalFiles: fileStats.totalFiles,
+                                oracleFiles: 0,
+                                solutionName: "",
+                                linesOfCode: fileStats.totalLines,
+                                fileSize: formatBytes(fileStats.totalSize),
+                                namespaces: [],
+                                classes: 0,
+                                dependencies: [],
+                              },
+                              conversion: {
+                                totalConverted: fileStats.totalFiles,
+                                totalFiles: fileStats.totalFiles,
+                                successRate: 100,
+                                convertedFiles: [],
+                              },
+                              zipFilename: resp.zipFilename,
+                            });
+                            setCurrentPage("result");
+                          } else {
+                            setCurrentPage("success");
+                          }
+                        } catch (e) {
+                          setErrorMessage("Batch processing failed");
+                          setCurrentPage("error");
+                        } finally {
+                          setIsProcessing(false);
+                        }
+                      }
+                    : handleZipConvert
+                }
+              />
+            ) : (
+              <SingleEditorsPanel
+                singleFileName={singleFileName}
+                setSingleFileName={setSingleFileName}
+                singleSourceCode={singleSourceCode}
+                setSingleSourceCode={setSingleSourceCode}
+                singleResult={singleResult}
+                isConvertingSingle={isConvertingSingle}
+                singleOutputs={singleOutputs}
+                onConvert={handleSingleConvert}
+                onDownload={handleSingleDownload}
+                placeholder={
+                  isBatchHuman || selectedTab === "idmc-batch"
+                    ? "Paste your .sh/.bat script here..."
+                    : isSnowflakeTab
+                    ? "Paste Oracle SQL/PLSQL here..."
+                    : "Paste SQL for IDMC summary here (Oracle/Redshift)..."
+                }
+              />
+            )}
           </div>
         )}
 
@@ -1162,6 +968,8 @@ const Dashboard: React.FC = () => {
                   Download
                 </button>
               </div>
+
+              {/* Inline side-by-side preview removed; content shown in the Preview modal */}
 
               {/* Preview modal for converted files if available */}
               {showPreview && convertedFile && (
