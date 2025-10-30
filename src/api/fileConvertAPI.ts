@@ -126,50 +126,167 @@ export const fileDownload = async (zipFilename : string): Promise<void> => {
     throw new Error('Failed to download file');
   }
 };
-// export const fileDownload = async (filename: string): Promise<void> => {
-//   const token = await localStorage.getItem('token') || '';
 
-//   try {
-//     const response = await apiClient.post(`/download`,
-//       { "filename":filename },
-//       {
-//         headers: {
-//           Authorization: `Bearer ${token}`, // remove extra quotes
-//         },
-//       }
-//     );
+// Unified Conversion API helpers
+export type UnifiedTarget = 'snowflake' | 'idmc';
+export type UnifiedInputType = 'zip' | 'single';
+export type UnifiedSourceType = 'oracle' | 'redshift' | 'auto';
+export type IdmcOutputFormat = 'json' | 'docx';
 
-//     // Convert response to blob and trigger download
-//     const blob = new Blob([response.data], { type: 'application/zip' });
-//     const downloadUrl = URL.createObjectURL(blob);
+export interface UnifiedZipRequest {
+  inputType: 'zip';
+  target: UnifiedTarget;
+  sourceType?: UnifiedSourceType;
+  zipFilePath: string; // absolute path from upload response
+  outputFormat?: IdmcOutputFormat; // IDMC only
+}
 
-//     const a = document.createElement('a');
-//     a.href = downloadUrl;
-//     a.download = filename.endsWith('.zip') ? filename : `${filename}.zip`;
-//     document.body.appendChild(a);
-//     a.click();
-//     a.remove();
+export interface UnifiedSingleRequest {
+  inputType: 'single';
+  target: UnifiedTarget;
+  sourceType?: UnifiedSourceType;
+  sourceCode: string;
+  fileName: string;
+  outputFormat?: IdmcOutputFormat; // IDMC only
+}
 
-//     // Clean up URL object after a short delay
-//     setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
-//   } catch (error) {
-//     console.error('Download failed:', error);
-//     alert('Download failed.');
-//   }
-// };
+export interface UnifiedZipResponse {
+  success: boolean;
+  target: UnifiedTarget;
+  jobId: string;
+  zipFilename?: string;
+  zipFilePath?: string;
+  jsonContent?: string | null;
+  conversion?: any;
+}
 
-// export const fileDownload = async (filename: string): Promise<DownloadResponse> =>{
-//     const token = await localStorage.getItem('token')
-//   try {
-//     const response = await apiClient.post<DownloadResponse>('/download', {"filename":filename}, {
-//       headers: {
-//         Authorization: `Bearer ${token ? token : ''}`,
-//       },
-//     });
+export interface SingleOutputFile {
+  name: string;
+  path: string; // absolute file path on server
+  mime: string;
+  kind: 'single';
+}
 
-//     return response.data;
-//   } catch (error) {
-//     console.error(error);
-//     return { message: 'Convert failed' };
-//   } 
-// }
+export interface UnifiedSingleResponse {
+  success: boolean;
+  conversionType: string;
+  fileName: string;
+  jsonContent?: string | null;
+  outputFiles: SingleOutputFile[];
+}
+
+export type UnifiedResponse = UnifiedZipResponse | UnifiedSingleResponse;
+
+export const convertUnified = async (payload: UnifiedZipRequest | UnifiedSingleRequest): Promise<UnifiedResponse> => {
+  const token = localStorage.getItem('token') || '';
+  try {
+    const response = await apiClient.post<UnifiedResponse>(
+      '/conversion/convert-unified',
+      payload,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+    return response.data;
+  } catch (error) {
+    console.error('convertUnified failed:', error);
+    throw new Error('Unified conversion failed');
+  }
+};
+
+export interface ProgressResponse {
+  success: boolean;
+  job: {
+    jobId: string;
+    steps: Array<{ name: string; progress: number }>;
+    status: 'pending' | 'created' | 'initializing' | 'extracting' | 'scanning' | 'converting' | 'packaging' | 'completed' | 'failed';
+    result?: any;
+    error?: string;
+  };
+}
+
+export const getConversionProgress = async (jobId: string): Promise<ProgressResponse> => {
+  const token = localStorage.getItem('token') || '';
+  try {
+    const response = await apiClient.get<ProgressResponse>(`/conversion/progress/${encodeURIComponent(jobId)}` , {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      }
+    });
+    return response.data;
+  } catch (error) {
+    console.error('getConversionProgress failed:', error);
+    throw new Error('Failed to fetch progress');
+  }
+};
+
+export const conversionDownload = async (filenameOrPath: { filename?: string; filePath?: string }): Promise<void> => {
+  const token = localStorage.getItem('token') || '';
+  try {
+    const response = await apiClient.post(
+      '/conversion/download',
+      filenameOrPath,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        responseType: 'blob',
+      }
+    );
+
+    const contentDisposition = (response as any).headers?.['content-disposition'] || '';
+    const suggestedNameMatch = /filename\*=UTF-8''([^;\n]+)/.exec(contentDisposition) || /filename="?([^";\n]+)"?/.exec(contentDisposition);
+    const suggestedName = suggestedNameMatch?.[1] ? decodeURIComponent(suggestedNameMatch[1]) : undefined;
+
+    const blob = new Blob([response.data]);
+    const downloadUrl = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = suggestedName || (filenameOrPath.filename || (filenameOrPath.filePath ? filenameOrPath.filePath.split('/').pop() || 'download' : 'download'));
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(downloadUrl);
+  } catch (error) {
+    console.error('conversionDownload failed:', error);
+    throw new Error('Failed to download file');
+  }
+};
+
+// IDMC Batch helpers
+export interface IdmcBatchZipRequest {
+  inputType: 'zip';
+  zipFilePath: string;
+  scriptType?: 'oracle' | 'redshift';
+}
+
+export interface IdmcBatchSingleRequest {
+  inputType: 'single';
+  script: string;
+  fileName: string;
+  scriptType?: 'oracle' | 'redshift';
+}
+
+export const idmcBatch = async (payload: IdmcBatchZipRequest | IdmcBatchSingleRequest): Promise<any> => {
+  const token = localStorage.getItem('token') || '';
+  const response = await apiClient.post('/idmc/batch', payload, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    }
+  });
+  return response.data;
+};
+
+export const idmcBatchSummary = async (script: string, fileName: string, outputFormat?: 'md' | 'txt'): Promise<any> => {
+  const token = localStorage.getItem('token') || '';
+  const response = await apiClient.post('/idmc/batch-summary', { script, fileName, ...(outputFormat ? { outputFormat } : {}) }, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    }
+  });
+  return response.data;
+};

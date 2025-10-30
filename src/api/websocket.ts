@@ -48,7 +48,7 @@ export interface SystemNotification {
 // Socket instance
 let socket: Socket | null = null;
 
-export const connectSocket = (jobId?: string): Socket => {
+export const connectSocket = (_jobId?: string): Socket => {
   if (!socket) {
     socket = io(SOCKET_URL, {
       transports: ["websocket"],
@@ -56,10 +56,6 @@ export const connectSocket = (jobId?: string): Socket => {
 
     socket.on("connect", () => {
       console.log("✅ Connected to WebSocket:", socket?.id);
-      if (jobId) {
-        socket?.emit("join-job", jobId);
-        console.log(`📦 Joined room: ${jobId}`);
-      }
     });
 
     socket.on("disconnect", () => {
@@ -70,11 +66,7 @@ export const connectSocket = (jobId?: string): Socket => {
     socket.on("connect_error", (error) => {
       console.error("WebSocket connection error:", error);
     });
-  } else if (jobId) {
-    // If socket already exists, join the job room
-    socket.emit("join-job", jobId);
-    console.log(`📦 Joined existing socket to room: ${jobId}`);
-  }
+  } 
   return socket;
 };
 
@@ -82,11 +74,6 @@ export const getSocket = (): Socket | null => socket;
 
 export const disconnectSocket = (jobId?: string) => {
   if (socket) {
-    if (jobId) {
-      socket.emit("job-completed", jobId);
-      socket.emit("leave-job", jobId);
-      console.log(`🚪 Left room: ${jobId}`);
-    }
     socket.disconnect();
     socket = null;
   }
