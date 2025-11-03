@@ -701,7 +701,7 @@ const Dashboard: React.FC = () => {
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
         {/* Tabs */}
         <div className="flex flex-wrap gap-2 mb-6">
-          {tabButton("idmc-sql", "SQL → IDMC Summary (auto)")}
+          {tabButton("idmc-sql", "Oracle/Redshift SQL → IDMC Summary")}
           {tabButton("snowflake", "Oracle SQL → Snowflake")}
           {tabButton("idmc-batch", "Batch Script → IDMC Summary")}
           {tabButton("batch-human", "Batch Script → Human Language")}
