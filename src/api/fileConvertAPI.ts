@@ -257,23 +257,100 @@ export const conversionDownload = async (filenameOrPath: { filename?: string; fi
   }
 };
 
-// IDMC Batch helpers
+// IDMC Batch Script API helpers
+export type BatchOutputFormat = 'doc' | 'txt';
+
 export interface IdmcBatchZipRequest {
   inputType: 'zip';
-  zipFilePath: string;
-  scriptType?: 'oracle' | 'redshift';
+  zipPath?: string; // For zipPath (preferred)
+  zipFilePath?: string; // Also support zipFilePath for backward compatibility
+  outputFormat?: BatchOutputFormat; // Optional, default: "doc"
 }
 
 export interface IdmcBatchSingleRequest {
   inputType: 'single';
-  script: string;
-  fileName: string;
-  scriptType?: 'oracle' | 'redshift';
+  // For single file: either script OR filePath
+  script?: string; // Direct script code
+  filePath?: string; // OR file path on server
+  name?: string; // Optional filename (for single file when filePath is used)
+  outputFormat?: BatchOutputFormat; // Optional, default: "doc"
 }
 
-export const idmcBatch = async (payload: IdmcBatchZipRequest | IdmcBatchSingleRequest): Promise<any> => {
+export type IdmcBatchRequest = IdmcBatchZipRequest | IdmcBatchSingleRequest;
+
+export interface IdmcSummaryResponse {
+  success: boolean;
+  message?: string;
+  fileName?: string;
+  scriptType?: string;
+  originalContent?: string;
+  extractionResult?: {
+    totalStatements: number;
+    statements: Array<{
+      statement: string;
+      type: string;
+      lineNumber: number;
+    }>;
+  };
+  idmcSummaries?: Array<{
+    statement: string | null;
+    type: string;
+    lineNumber: number | null;
+    idmcSummary: string;
+    fileName: string;
+  }>;
+  jobId?: string;
+  jsonContent?: string;
+  outputFiles: SingleOutputFile[];
+  // For ZIP processing
+  source?: string;
+  processing?: {
+    totalFiles: number;
+    processedFiles: number;
+    failedFiles: number;
+    successRate: number;
+    results: any[];
+  };
+  zipFilename?: string;
+  zipFilePath?: string;
+}
+
+export interface HumanLanguageResponse {
+  success: boolean;
+  message?: string;
+  fileName?: string;
+  originalContent?: string;
+  humanReadableSummary?: string;
+  summary?: string;
+  jsonContent?: string;
+  outputFiles: SingleOutputFile[];
+  // For ZIP processing
+  source?: string;
+  jobId?: string;
+  processing?: {
+    totalFiles: number;
+    processedFiles: number;
+    failedFiles: number;
+    successRate: number;
+    results: any[];
+  };
+  zipFilename?: string;
+  zipFilePath?: string;
+}
+
+// Batch Script to IDMC Summary API
+export const idmcBatch = async (payload: IdmcBatchRequest): Promise<IdmcSummaryResponse> => {
   const token = localStorage.getItem('token') || '';
-  const response = await apiClient.post('/idmc/batch', payload, {
+  // Normalize zipPath vs zipFilePath for backward compatibility
+  const normalizedPayload: any = { ...payload };
+  if (payload.inputType === 'zip') {
+    if (normalizedPayload.zipFilePath && !normalizedPayload.zipPath) {
+      normalizedPayload.zipPath = normalizedPayload.zipFilePath;
+      delete normalizedPayload.zipFilePath;
+    }
+  }
+  
+  const response = await apiClient.post<IdmcSummaryResponse>('/idmc/batch-idmc-summary', normalizedPayload, {
     headers: {
       Authorization: `Bearer ${token}`,
     }
@@ -281,9 +358,21 @@ export const idmcBatch = async (payload: IdmcBatchZipRequest | IdmcBatchSingleRe
   return response.data;
 };
 
-export const idmcBatchSummary = async (script: string, fileName: string, outputFormat?: 'md' | 'txt'): Promise<any> => {
+// Batch Script to Human Language API
+export const idmcBatchSummary = async (
+  payload: IdmcBatchRequest
+): Promise<HumanLanguageResponse> => {
   const token = localStorage.getItem('token') || '';
-  const response = await apiClient.post('/idmc/batch-summary', { script, fileName, ...(outputFormat ? { outputFormat } : {}) }, {
+  // Normalize zipPath vs zipFilePath for backward compatibility
+  const normalizedPayload: any = { ...payload };
+  if (payload.inputType === 'zip') {
+    if (normalizedPayload.zipFilePath && !normalizedPayload.zipPath) {
+      normalizedPayload.zipPath = normalizedPayload.zipFilePath;
+      delete normalizedPayload.zipFilePath;
+    }
+  }
+  
+  const response = await apiClient.post<HumanLanguageResponse>('/idmc/batch-human-language', normalizedPayload, {
     headers: {
       Authorization: `Bearer ${token}`,
     }

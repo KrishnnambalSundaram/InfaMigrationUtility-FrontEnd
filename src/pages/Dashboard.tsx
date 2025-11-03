@@ -18,6 +18,7 @@ import {
   fileUpload,
   idmcBatch,
   idmcBatchSummary,
+  type BatchOutputFormat,
   type IdmcOutputFormat,
   type SingleOutputFile,
   type UnifiedResponse,
@@ -122,8 +123,8 @@ const Dashboard: React.FC = () => {
   // Output format (IDMC only)
   const [outputFormat, setOutputFormat] = useState<IdmcOutputFormat>("json");
   // Output format for batch/human summaries
-  const [batchOutputFormat, setBatchOutputFormat] = useState<"md" | "txt">(
-    "md"
+  const [batchOutputFormat, setBatchOutputFormat] = useState<BatchOutputFormat>(
+    "doc"
   );
 
   // Clear single editors on tab change
@@ -511,8 +512,8 @@ const Dashboard: React.FC = () => {
         const res = await idmcBatch({
           inputType: "single",
           script: singleSourceCode,
-          fileName: singleFileName,
-          ...(batchOutputFormat ? { outputFormat: batchOutputFormat } : {}),
+          name: singleFileName,
+          outputFormat: batchOutputFormat,
         });
         // Try to capture downloadable outputs if provided by API
         if (res?.outputFiles && Array.isArray(res.outputFiles)) {
@@ -541,11 +542,12 @@ const Dashboard: React.FC = () => {
         }
       } else if (selectedTab === "batch-human") {
         // Human language summary of batch script
-        const res = await idmcBatchSummary(
-          singleSourceCode,
-          singleFileName,
-          batchOutputFormat
-        );
+        const res = await idmcBatchSummary({
+          inputType: "single",
+          script: singleSourceCode,
+          name: singleFileName,
+          outputFormat: batchOutputFormat,
+        });
         // Try to capture downloadable outputs if provided by API
         if (res?.outputFiles && Array.isArray(res.outputFiles)) {
           setSingleOutputs(res.outputFiles);
@@ -562,6 +564,8 @@ const Dashboard: React.FC = () => {
         // Show only the output content if available
         if (typeof res?.jsonContent === "string" && res.jsonContent.trim()) {
           setSingleResult(res.jsonContent);
+        } else if (typeof res?.humanReadableSummary === "string" && res.humanReadableSummary.trim()) {
+          setSingleResult(res.humanReadableSummary);
         } else if (typeof res?.summary === "string" && res.summary.trim()) {
           setSingleResult(res.summary);
         } else {
@@ -626,11 +630,13 @@ const Dashboard: React.FC = () => {
         const mime = isJsonLike ? "application/json" : "text/plain";
         const proposedName =
           selectedTab === "idmc-batch"
-            ? isJsonLike
-              ? "idmc-summary.json"
+            ? batchOutputFormat === "doc"
+              ? "idmc-summary.docx"
               : "idmc-summary.txt"
             : selectedTab === "batch-human"
-            ? "human-summary.txt"
+            ? batchOutputFormat === "doc"
+              ? "human-summary.docx"
+              : "human-summary.txt"
             : "result.txt";
         const blob = new Blob([singleResult], { type: mime });
         const url = window.URL.createObjectURL(blob);
@@ -757,12 +763,12 @@ const Dashboard: React.FC = () => {
               <select
                 value={batchOutputFormat}
                 onChange={(e) =>
-                  setBatchOutputFormat(e.target.value as "md" | "txt")
+                  setBatchOutputFormat(e.target.value as BatchOutputFormat)
                 }
                 className="border rounded-md px-3 py-2 text-sm"
               >
-                <option value="md">Markdown (.md)</option>
-                <option value="txt">Text (.txt)</option>
+                <option value="doc">DOC (.docx)</option>
+                <option value="txt">TXT (.txt)</option>
               </select>
             </div>
           )}
@@ -787,19 +793,17 @@ const Dashboard: React.FC = () => {
                           setIsProcessing(true);
                           const resp = await idmcBatch({
                             inputType: "zip",
-                            zipFilePath: uploadedFile.path,
-                            ...(batchOutputFormat
-                              ? { outputFormat: batchOutputFormat }
-                              : {}),
+                            zipPath: uploadedFile.path,
+                            outputFormat: batchOutputFormat,
                           });
-                          if (resp?.zipFilename) {
+                          if (resp?.zipFilename || resp?.zipFilePath) {
                             setConvertedFile({
                               success: true,
-                              message: "completed",
-                              source: "idmc",
-                              jobId: "batch_zip",
+                              message: resp.message || "completed",
+                              source: resp.source || "idmc",
+                              jobId: resp.jobId || "batch_zip",
                               analysis: {
-                                totalFiles: fileStats.totalFiles,
+                                totalFiles: resp.processing?.totalFiles || fileStats.totalFiles,
                                 oracleFiles: 0,
                                 solutionName: "",
                                 linesOfCode: fileStats.totalLines,
@@ -809,12 +813,57 @@ const Dashboard: React.FC = () => {
                                 dependencies: [],
                               },
                               conversion: {
-                                totalConverted: fileStats.totalFiles,
-                                totalFiles: fileStats.totalFiles,
-                                successRate: 100,
+                                totalConverted: resp.processing?.processedFiles || fileStats.totalFiles,
+                                totalFiles: resp.processing?.totalFiles || fileStats.totalFiles,
+                                successRate: resp.processing?.successRate || 100,
                                 convertedFiles: [],
                               },
-                              zipFilename: resp.zipFilename,
+                              zipFilename: resp.zipFilename || (resp.zipFilePath ? resp.zipFilePath.split('/').pop() : undefined) || "batch_output.zip",
+                            });
+                            setCurrentPage("result");
+                          } else {
+                            setCurrentPage("success");
+                          }
+                        } catch (e) {
+                          setErrorMessage("Batch processing failed");
+                          setCurrentPage("error");
+                        } finally {
+                          setIsProcessing(false);
+                        }
+                      }
+                    : selectedTab === "batch-human"
+                    ? async () => {
+                        if (!uploadedFile?.path || !fileStats) return;
+                        try {
+                          setIsProcessing(true);
+                          const resp = await idmcBatchSummary({
+                            inputType: "zip",
+                            zipPath: uploadedFile.path,
+                            outputFormat: batchOutputFormat,
+                          });
+                          if (resp?.zipFilename || resp?.zipFilePath) {
+                            setConvertedFile({
+                              success: true,
+                              message: resp.message || "completed",
+                              source: resp.source || "human",
+                              jobId: resp.jobId || "batch_human_zip",
+                              analysis: {
+                                totalFiles: resp.processing?.totalFiles || fileStats.totalFiles,
+                                oracleFiles: 0,
+                                solutionName: "",
+                                linesOfCode: fileStats.totalLines,
+                                fileSize: formatBytes(fileStats.totalSize),
+                                namespaces: [],
+                                classes: 0,
+                                dependencies: [],
+                              },
+                              conversion: {
+                                totalConverted: resp.processing?.processedFiles || fileStats.totalFiles,
+                                totalFiles: resp.processing?.totalFiles || fileStats.totalFiles,
+                                successRate: resp.processing?.successRate || 100,
+                                convertedFiles: [],
+                              },
+                              zipFilename: resp.zipFilename || (resp.zipFilePath ? resp.zipFilePath.split('/').pop() : undefined) || "human_output.zip",
                             });
                             setCurrentPage("result");
                           } else {
