@@ -72,7 +72,7 @@ export const connectSocket = (_jobId?: string): Socket => {
 
 export const getSocket = (): Socket | null => socket;
 
-export const disconnectSocket = (jobId?: string) => {
+export const disconnectSocket = (_jobId?: string) => {
   if (socket) {
     socket.disconnect();
     socket = null;

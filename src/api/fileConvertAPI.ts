@@ -302,6 +302,7 @@ export interface IdmcSummaryResponse {
   jobId?: string;
   jsonContent?: string;
   outputFiles: SingleOutputFile[];
+  filePath?: string; // Optional file path for backward compatibility
   // For ZIP processing
   source?: string;
   processing?: {
@@ -324,6 +325,7 @@ export interface HumanLanguageResponse {
   summary?: string;
   jsonContent?: string;
   outputFiles: SingleOutputFile[];
+  filePath?: string; // Optional file path for backward compatibility
   // For ZIP processing
   source?: string;
   jobId?: string;
