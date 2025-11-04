@@ -281,6 +281,24 @@ export type IdmcBatchRequest = IdmcBatchZipRequest | IdmcBatchSingleRequest;
 export interface IdmcSummaryResponse {
   success: boolean;
   message?: string;
+  source?: string;
+  jobId?: string;
+  zipFilename?: string;
+  zipFilePath?: string;
+  results?: Array<{
+    fileName: string;
+    originalContent: string;
+    convertedContent: string;
+    success: boolean;
+    targetFolder?: string;
+  }>;
+  processing?: {
+    totalFiles: number;
+    processedFiles: number;
+    failedFiles: number;
+    successRate: number;
+  };
+  // Single file response fields (for backward compatibility)
   fileName?: string;
   scriptType?: string;
   originalContent?: string;
@@ -299,21 +317,9 @@ export interface IdmcSummaryResponse {
     idmcSummary: string;
     fileName: string;
   }>;
-  jobId?: string;
   jsonContent?: string;
-  outputFiles: SingleOutputFile[];
-  filePath?: string; // Optional file path for backward compatibility
-  // For ZIP processing
-  source?: string;
-  processing?: {
-    totalFiles: number;
-    processedFiles: number;
-    failedFiles: number;
-    successRate: number;
-    results: any[];
-  };
-  zipFilename?: string;
-  zipFilePath?: string;
+  outputFiles?: SingleOutputFile[];
+  filePath?: string;
 }
 
 export interface HumanLanguageResponse {

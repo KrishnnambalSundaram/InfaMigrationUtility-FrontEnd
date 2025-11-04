@@ -123,15 +123,49 @@ const Dashboard: React.FC = () => {
   // Output format (IDMC only)
   const [outputFormat, setOutputFormat] = useState<IdmcOutputFormat>("json");
   // Output format for batch/human summaries
-  const [batchOutputFormat, setBatchOutputFormat] = useState<BatchOutputFormat>(
-    "doc"
-  );
+  const [batchOutputFormat, setBatchOutputFormat] =
+    useState<BatchOutputFormat>("doc");
 
-  // Clear single editors on tab change
+  // Reset UI to upload page when tab changes
   useEffect(() => {
+    // Reset to upload page
+    setCurrentPage("upload");
+
+    // Clear file upload state
+    setSelectedFile(null);
+    setUploadedFile(null);
+    setFileStats(null);
+    setConvertedFile(null);
+
+    // Clear progress and overlay state
+    setProgress(0);
+    setCurrentStepText("");
+    setFilesConvertedCount(0);
+    setTotalFilesCount(0);
+    setElapsedMs(null);
+    setEtaMs(null);
+    setShowZipOverlay(false);
+    setIsProcessing(false);
+
+    // Clear error and preview state
+    setErrorMessage("");
+    setShowPreview(false);
+    setExpandedIndex(null);
+    finalizedRef.current = false;
+
+    // Disconnect any active WebSocket connections
+    if (activeJobIdRef.current) {
+      disconnectSocket(activeJobIdRef.current);
+      activeJobIdRef.current = null;
+    } else {
+      disconnectSocket();
+    }
+
+    // Clear single editors
     setSingleSourceCode("");
     setSingleResult("");
     setSingleOutputs([]);
+    setIsConvertingSingle(false);
     setSingleFileName(
       selectedTab === "idmc-batch" || selectedTab === "batch-human"
         ? "run.sh"
@@ -330,7 +364,7 @@ const Dashboard: React.FC = () => {
           data?.status === "completed" || data?.status === "success";
         const completedByProgress =
           typeof data?.progress === "number" && data.progress >= 100;
-        const hasZip = !!data?.result?.zipFilename;
+        const hasZip = !!data?.result?.zipFilename || !!data?.zipFilename;
         if (completedStatus || completedByProgress || hasZip) {
           finalizeSuccess(data);
         } else if (data?.status === "failed") {
@@ -367,49 +401,31 @@ const Dashboard: React.FC = () => {
       const finalizeSuccess = (data: any) => {
         if (finalizedRef.current) return;
         finalizedRef.current = true;
+
+        // Use standardized API response structure - results array is at top level
+        const responseData = data?.result || data || response;
         const zipName =
-          data?.result?.zipFilename || (response as any).zipFilename;
-        const rawConverted = data?.result?.conversion?.convertedFiles || [];
-        const mappedConverted = rawConverted.map((f: any) => ({
-          original:
-            f.original ||
-            f.source ||
-            f.input ||
-            f.originalFile ||
-            f.name ||
-            f.sourceName ||
-            f.originalFilename ||
-            "",
-          converted:
-            f.converted ||
-            f.target ||
-            f.output ||
-            f.convertedFile ||
-            f.name ||
-            f.targetName ||
-            f.convertedFilename ||
-            "",
-          oracleContent:
-            f.oracleContent ||
-            f.sourceContent ||
-            f.inputContent ||
-            f.originalContent ||
-            f.originalCode ||
-            f.sourceCode ||
-            f.sqlContent ||
-            f.redshiftContent ||
-            "",
-          snowflakeContent:
-            f.snowflakeContent ||
-            f.targetContent ||
-            f.outputContent ||
-            f.convertedContent ||
-            f.convertedCode ||
-            f.targetCode ||
-            f.jsContent ||
-            f.sqlContentConverted ||
-            f.idmcContent ||
-            "",
+          responseData?.zipFilename || (response as any).zipFilename;
+
+        // Get results array directly from standardized response
+        const rawResults =
+          responseData?.results ||
+          data?.result?.results ||
+          (response as any)?.results ||
+          [];
+
+        // Map standardized results array to convertedFiles format
+        const mappedConverted = rawResults.map((f: any) => ({
+          original: f.fileName || f.original || f.name || "",
+          converted: f.fileName
+            ? isSnowflakeTab
+              ? `${f.fileName.replace(/\.(sql|plsql)$/i, "")}.sql`
+              : `${f.fileName.replace(/\.(sql|plsql)$/i, "")}.${
+                  outputFormat === "docx" ? "docx" : "json"
+                }`
+            : f.converted || f.name || "",
+          oracleContent: f.originalContent || "",
+          snowflakeContent: f.convertedContent || "",
           targetFolder: f.targetFolder || "",
         }));
 
@@ -431,13 +447,13 @@ const Dashboard: React.FC = () => {
           },
           conversion: {
             totalConverted:
-              data?.result?.conversion?.totalConverted ||
+              responseData?.processing?.processedFiles ||
               mappedConverted.length,
             totalFiles:
-              data?.result?.conversion?.totalFiles ||
+              responseData?.processing?.totalFiles ||
               fileStats?.totalFiles ||
               mappedConverted.length,
-            successRate: data?.result?.conversion?.successRate || 0,
+            successRate: responseData?.processing?.successRate || 0,
             convertedFiles: mappedConverted,
           },
           zipFilename: zipName,
@@ -469,17 +485,487 @@ const Dashboard: React.FC = () => {
           (response as any).zipFilename
         );
         finalizeSuccess({
-          result: {
-            zipFilename: (response as any).zipFilename,
-            analysis: (response as any).analysis,
-            conversion: (response as any).conversion,
-          },
+          zipFilename: (response as any).zipFilename,
+          zipFilePath: (response as any).zipFilePath,
+          results: (response as any).results || [],
+          processing: (response as any).processing,
         });
       }
     } catch (error) {
       console.error("Conversion error:", error);
       setErrorMessage(
         error instanceof Error ? error.message : "Conversion failed"
+      );
+      setShowZipOverlay(false);
+      setCurrentPage("error");
+      if (activeJobIdRef.current) {
+        disconnectSocket(activeJobIdRef.current);
+        activeJobIdRef.current = null;
+      }
+      finalizedRef.current = false;
+    }
+  };
+
+  // Batch IDMC ZIP Convert via API + WebSocket
+  const handleBatchIdmcConvert = async () => {
+    if (!uploadedFile?.path || !fileStats) return;
+
+    try {
+      finalizedRef.current = false;
+      setProgress(1);
+      setShowZipOverlay(true);
+      setErrorMessage("");
+      setCurrentStepText("");
+      setFilesConvertedCount(0);
+      setTotalFilesCount(0);
+      setElapsedMs(null);
+      setEtaMs(null);
+
+      const socket = connectSocket();
+      socket.off("progress-update");
+
+      let jobId: string | undefined = undefined;
+      let apiResponse: any = null;
+
+      // Set up WebSocket progress listener BEFORE API call
+      socket.on("progress-update", (data) => {
+        if (finalizedRef.current) return;
+
+        const computedProgress =
+          typeof data?.progress === "number"
+            ? data.progress
+            : typeof (data as any)?.percentage === "number"
+            ? (data as any).percentage
+            : data?.filesConverted && data?.totalFiles
+            ? Math.round(
+                (data.filesConverted / Math.max(1, data.totalFiles)) * 100
+              )
+            : progress;
+        setProgress(Math.max(1, Math.min(100, computedProgress || 1)));
+        if (!showZipOverlay) setShowZipOverlay(true);
+
+        if (typeof data?.currentStep === "string") {
+          setCurrentStepText(data.currentStep);
+        }
+        if (typeof data?.filesConverted === "number") {
+          setFilesConvertedCount(data.filesConverted);
+        }
+        if (typeof data?.totalFiles === "number") {
+          setTotalFilesCount(data.totalFiles);
+        }
+        if (typeof data?.elapsedTime === "number")
+          setElapsedMs(data.elapsedTime);
+        if (typeof data?.estimatedTime === "number")
+          setEtaMs(data.estimatedTime);
+
+        const completedStatus =
+          data?.status === "completed" || data?.status === "success";
+        const completedByProgress =
+          typeof data?.progress === "number" && data.progress >= 100;
+        const hasZip =
+          !!data?.result?.zipFilename ||
+          !!data?.zipFilename ||
+          !!apiResponse?.zipFilename;
+
+        if (completedStatus || completedByProgress || hasZip) {
+          // Finalize with WebSocket data or API response
+          // WebSocket may wrap result in data.result with structure: { zipFilename, results, processing }
+          // Or pass it directly in data
+          // Priority: WebSocket result (data.result) > WebSocket data > API response
+          let finalData: any = null;
+
+          if (
+            data?.result &&
+            (data.result.results || data.result.zipFilename)
+          ) {
+            // WebSocket wrapped the response in data.result
+            finalData = data.result;
+          } else if (data?.results || data?.zipFilename) {
+            // WebSocket passed response directly in data
+            finalData = data;
+          } else if (apiResponse?.results && apiResponse?.zipFilename) {
+            // Use API response as fallback
+            finalData = apiResponse;
+          }
+
+          if (finalData && !finalizedRef.current) {
+            // Disconnect socket before finalizing
+            socket.off("progress-update");
+            socket.off("system-notification");
+            if (jobId) {
+              disconnectSocket(jobId);
+            }
+            activeJobIdRef.current = null;
+
+            finalizeBatchIdmc(finalData);
+          }
+        } else if (data?.status === "failed") {
+          setErrorMessage(data.error || "Batch processing failed");
+          setShowZipOverlay(false);
+          setCurrentPage("error");
+          if (activeJobIdRef.current) {
+            disconnectSocket(activeJobIdRef.current);
+            activeJobIdRef.current = null;
+          }
+        }
+      });
+
+      socket.on("system-notification", (payload) => {
+        try {
+          const { type, message } = payload || {};
+          console.log("[system-notification]", type, message);
+        } catch (_) {}
+      });
+
+      // Call API endpoint: POST /api/idmc/batch-idmc-summary
+      apiResponse = await idmcBatch({
+        inputType: "zip",
+        zipPath: uploadedFile.path,
+        outputFormat: batchOutputFormat,
+      });
+
+      // API Response structure:
+      // {
+      //   success: true,
+      //   zipFilename: "...",
+      //   zipFilePath: "...",
+      //   results: [{ fileName, originalContent, convertedContent, success }],
+      //   processing: { totalFiles, processedFiles, failedFiles, successRate }
+      // }
+
+      if (!apiResponse?.success) {
+        throw new Error(apiResponse?.message || "Batch IDMC conversion failed");
+      }
+
+      jobId = apiResponse.jobId;
+      if (jobId) {
+        activeJobIdRef.current = jobId;
+      }
+
+      // If API already returned complete response, finalize immediately and disconnect socket
+      if (
+        apiResponse?.success &&
+        apiResponse?.results &&
+        apiResponse?.zipFilename &&
+        !finalizedRef.current
+      ) {
+        // Disconnect socket immediately since we have complete response
+        socket.off("progress-update");
+        socket.off("system-notification");
+        if (jobId) {
+          disconnectSocket(jobId);
+        }
+        activeJobIdRef.current = null;
+
+        // Finalize with API response - ensure we pass the complete response object
+        finalizeBatchIdmc(apiResponse);
+      }
+    } catch (error) {
+      console.error("Batch IDMC conversion error:", error);
+      setErrorMessage(
+        error instanceof Error ? error.message : "Batch processing failed"
+      );
+      setShowZipOverlay(false);
+      setCurrentPage("error");
+      if (activeJobIdRef.current) {
+        disconnectSocket(activeJobIdRef.current);
+        activeJobIdRef.current = null;
+      }
+      finalizedRef.current = false;
+    }
+  };
+
+  // Finalize batch IDMC conversion - called from both API response and WebSocket
+  const finalizeBatchIdmc = (response: any) => {
+    if (finalizedRef.current) return;
+    finalizedRef.current = true;
+
+    // Extract data directly from API response
+    // API response structure: { success, zipFilename, zipFilePath, results: [{ fileName, originalContent, convertedContent }], processing }
+    const zipFilename =
+      response.zipFilename ||
+      (response.zipFilePath
+        ? response.zipFilePath.split("/").pop()
+        : undefined);
+
+    // Results array is at top level of response
+    const results = response.results || [];
+    const processing = response.processing || {
+      totalFiles: 0,
+      processedFiles: 0,
+      failedFiles: 0,
+      successRate: 0,
+    };
+
+    // Map results array to convertedFiles format
+    // Each result has: fileName, originalContent, convertedContent
+    const mappedConvertedFiles = results
+      .filter((result: any) => result && result.fileName)
+      .map((result: any) => {
+        // Extract content directly from API response - these fields are mandatory per API docs
+        const originalContent = String(result.originalContent || "");
+        const convertedContent = String(result.convertedContent || "");
+        const fileName = String(result.fileName || "");
+
+        return {
+          original: fileName,
+          converted: `${fileName.replace(/\.(bat|sh|ksh|py)$/i, "")}.${
+            batchOutputFormat === "doc" ? "docx" : "txt"
+          }`,
+          oracleContent: originalContent, // This will be shown in preview as "Original"
+          snowflakeContent: convertedContent, // This will be shown in preview as "Converted"
+          targetFolder: result.targetFolder || "",
+        };
+      });
+
+    // Verify we have required data before setting state
+    if (!zipFilename) {
+      console.error(
+        "[finalizeBatchIdmc] Missing zipFilename in response:",
+        response
+      );
+    }
+    if (mappedConvertedFiles.length === 0) {
+      console.warn(
+        "[finalizeBatchIdmc] No converted files mapped from results:",
+        results
+      );
+    }
+
+    // Set converted file state
+    setConvertedFile({
+      success: true,
+      message: response.message || "completed",
+      source: response.source || "idmc",
+      jobId: response.jobId || "batch_zip",
+      analysis: {
+        totalFiles: processing.totalFiles || fileStats?.totalFiles || 0,
+        oracleFiles: 0,
+        solutionName: "",
+        linesOfCode: fileStats?.totalLines || 0,
+        fileSize: formatBytes(fileStats?.totalSize || 0),
+        namespaces: [],
+        classes: 0,
+        dependencies: [],
+      },
+      conversion: {
+        totalConverted:
+          processing.processedFiles ||
+          mappedConvertedFiles.length ||
+          fileStats?.totalFiles ||
+          0,
+        totalFiles: processing.totalFiles || fileStats?.totalFiles || 0,
+        successRate: processing.successRate || 100,
+        convertedFiles: mappedConvertedFiles,
+      },
+      zipFilename: zipFilename || "batch_output.zip",
+    });
+
+    setProgress(100);
+    setShowZipOverlay(false);
+    setCurrentPage("result");
+
+    // Socket cleanup is already done before calling this function
+    // This is just a safety check
+    if (activeJobIdRef.current) {
+      disconnectSocket(activeJobIdRef.current);
+      activeJobIdRef.current = null;
+    }
+  };
+
+  // Batch Human Language ZIP Convert via API + WebSocket
+  const handleBatchHumanConvert = async () => {
+    if (!uploadedFile?.path || !fileStats) return;
+
+    try {
+      finalizedRef.current = false; // Reset finalized flag
+      setProgress(1);
+      setShowZipOverlay(true);
+      setErrorMessage("");
+      setCurrentStepText("");
+      setFilesConvertedCount(0);
+      setTotalFilesCount(0);
+      setElapsedMs(null);
+      setEtaMs(null);
+
+      const socket = connectSocket();
+      socket.off("progress-update");
+
+      let resp: any = null;
+      let jobId: string | undefined = undefined;
+
+      const finalizeBatchHuman = (data?: any) => {
+        if (finalizedRef.current) {
+          return;
+        }
+        finalizedRef.current = true;
+
+        // When called with resp directly, data = resp
+        // When called from WebSocket, data might have result wrapper
+        // Use the data parameter directly if it exists, otherwise use resp closure
+        const responseData = data || resp;
+
+        // Extract zipFilename - API response has it at top level
+        const zipName =
+          responseData?.zipFilename ||
+          (responseData?.zipFilePath
+            ? responseData.zipFilePath.split("/").pop()
+            : undefined) ||
+          "human_output.zip";
+
+        // Extract results array - API response has results at top level
+        // responseData = data || resp, so responseData.results works for both API and WebSocket
+        const results = (responseData?.results || // Direct from responseData (works for both cases)
+          data?.result?.results || // WebSocket wrapped structure (if data has result wrapper)
+          []) as any[]; // Empty if not found
+
+        // Map standardized results array to convertedFiles format
+        const mappedConvertedFiles = results
+          .filter((result: any) => result != null && result.fileName)
+          .map((result: any) => {
+            // Use standardized fields from API response
+            const originalContent = result.originalContent || "";
+            const convertedContent = result.convertedContent || "";
+            const fileName = result.fileName;
+
+            return {
+              original: fileName,
+              converted: `${fileName.replace(/\.(bat|sh|ksh|py)$/i, "")}.${
+                batchOutputFormat === "doc" ? "docx" : "txt"
+              }`,
+              oracleContent: originalContent,
+              snowflakeContent: convertedContent,
+              targetFolder: result.targetFolder || "",
+            };
+          });
+
+        setConvertedFile({
+          success: true,
+          message: responseData?.message || "completed",
+          source: responseData?.source || "human",
+          jobId: jobId || "batch_human_zip",
+          analysis: {
+            totalFiles:
+              responseData?.processing?.totalFiles || fileStats.totalFiles,
+            oracleFiles: 0,
+            solutionName: "",
+            linesOfCode: fileStats.totalLines,
+            fileSize: formatBytes(fileStats.totalSize),
+            namespaces: [],
+            classes: 0,
+            dependencies: [],
+          },
+          conversion: {
+            totalConverted:
+              responseData?.processing?.processedFiles ||
+              mappedConvertedFiles.length ||
+              fileStats.totalFiles,
+            totalFiles:
+              responseData?.processing?.totalFiles || fileStats.totalFiles,
+            successRate: responseData?.processing?.successRate || 100,
+            convertedFiles: mappedConvertedFiles,
+          },
+          zipFilename: zipName,
+        });
+        setProgress(100);
+        setShowZipOverlay(false);
+
+        // Remove WebSocket listeners to prevent further updates
+        socket.off("progress-update");
+        socket.off("system-notification");
+
+        setCurrentPage("result");
+        if (jobId) {
+          disconnectSocket(jobId);
+        }
+        activeJobIdRef.current = null;
+      };
+
+      socket.on("progress-update", (data) => {
+        console.log("[socket] batch-human progress-update:", data);
+
+        // Don't update if already finalized
+        if (finalizedRef.current) {
+          console.log(
+            "[socket] batch-human already finalized, ignoring progress update"
+          );
+          return;
+        }
+
+        const computedProgress =
+          typeof data?.progress === "number"
+            ? data.progress
+            : typeof (data as any)?.percentage === "number"
+            ? (data as any).percentage
+            : data?.filesConverted && data?.totalFiles
+            ? Math.round(
+                (data.filesConverted / Math.max(1, data.totalFiles)) * 100
+              )
+            : progress;
+        setProgress(Math.max(1, Math.min(100, computedProgress || 1)));
+        if (!showZipOverlay) setShowZipOverlay(true);
+
+        if (typeof data?.currentStep === "string") {
+          setCurrentStepText(data.currentStep);
+        }
+        if (typeof data?.filesConverted === "number") {
+          setFilesConvertedCount(data.filesConverted);
+        }
+        if (typeof data?.totalFiles === "number") {
+          setTotalFilesCount(data.totalFiles);
+        }
+        if (typeof data?.elapsedTime === "number")
+          setElapsedMs(data.elapsedTime);
+        if (typeof data?.estimatedTime === "number")
+          setEtaMs(data.estimatedTime);
+
+        const completedStatus =
+          data?.status === "completed" || data?.status === "success";
+        const completedByProgress =
+          typeof data?.progress === "number" && data.progress >= 100;
+        const hasZip =
+          !!data?.result?.zipFilename ||
+          !!data?.zipFilename ||
+          !!resp?.zipFilename;
+        if (completedStatus || completedByProgress || hasZip) {
+          finalizeBatchHuman(data);
+        } else if (data?.status === "failed") {
+          setErrorMessage(data.error || "Batch processing failed");
+          setShowZipOverlay(false);
+          setCurrentPage("error");
+          if (activeJobIdRef.current) {
+            disconnectSocket(activeJobIdRef.current);
+            activeJobIdRef.current = null;
+          }
+        }
+      });
+
+      resp = await idmcBatchSummary({
+        inputType: "zip",
+        zipPath: uploadedFile.path,
+        outputFormat: batchOutputFormat,
+      });
+
+      jobId = resp?.jobId;
+      if (jobId) {
+        activeJobIdRef.current = jobId;
+      }
+
+      socket.on("system-notification", (payload) => {
+        try {
+          const { type, message } = payload || {};
+          console.log("[system-notification]", type, message);
+        } catch (_) {}
+      });
+
+      // If API already returned a packaged zip without emitting progress, finalize immediately
+      if (resp?.success && (resp?.results || resp?.zipFilename)) {
+        finalizeBatchHuman(resp);
+      }
+    } catch (error) {
+      console.error("Batch Human conversion error:", error);
+      setErrorMessage(
+        error instanceof Error ? error.message : "Batch processing failed"
       );
       setShowZipOverlay(false);
       setCurrentPage("error");
@@ -564,7 +1050,10 @@ const Dashboard: React.FC = () => {
         // Show only the output content if available
         if (typeof res?.jsonContent === "string" && res.jsonContent.trim()) {
           setSingleResult(res.jsonContent);
-        } else if (typeof res?.humanReadableSummary === "string" && res.humanReadableSummary.trim()) {
+        } else if (
+          typeof res?.humanReadableSummary === "string" &&
+          res.humanReadableSummary.trim()
+        ) {
           setSingleResult(res.humanReadableSummary);
         } else if (typeof res?.summary === "string" && res.summary.trim()) {
           setSingleResult(res.summary);
@@ -663,6 +1152,8 @@ const Dashboard: React.FC = () => {
       return;
     }
     try {
+      // Use conversionDownload API which supports both filename and filePath
+      // This works for all conversion types (idmc-sql, snowflake, idmc-batch, batch-human)
       await conversionDownload({ filename: zipName });
     } catch (error) {
       console.error("Download error:", error);
@@ -787,95 +1278,9 @@ const Dashboard: React.FC = () => {
                 fileStats={fileStats as any}
                 onStart={
                   selectedTab === "idmc-batch"
-                    ? async () => {
-                        if (!uploadedFile?.path || !fileStats) return;
-                        try {
-                          setIsProcessing(true);
-                          const resp = await idmcBatch({
-                            inputType: "zip",
-                            zipPath: uploadedFile.path,
-                            outputFormat: batchOutputFormat,
-                          });
-                          if (resp?.zipFilename || resp?.zipFilePath) {
-                            setConvertedFile({
-                              success: true,
-                              message: resp.message || "completed",
-                              source: resp.source || "idmc",
-                              jobId: resp.jobId || "batch_zip",
-                              analysis: {
-                                totalFiles: resp.processing?.totalFiles || fileStats.totalFiles,
-                                oracleFiles: 0,
-                                solutionName: "",
-                                linesOfCode: fileStats.totalLines,
-                                fileSize: formatBytes(fileStats.totalSize),
-                                namespaces: [],
-                                classes: 0,
-                                dependencies: [],
-                              },
-                              conversion: {
-                                totalConverted: resp.processing?.processedFiles || fileStats.totalFiles,
-                                totalFiles: resp.processing?.totalFiles || fileStats.totalFiles,
-                                successRate: resp.processing?.successRate || 100,
-                                convertedFiles: [],
-                              },
-                              zipFilename: resp.zipFilename || (resp.zipFilePath ? resp.zipFilePath.split('/').pop() : undefined) || "batch_output.zip",
-                            });
-                            setCurrentPage("result");
-                          } else {
-                            setCurrentPage("success");
-                          }
-                        } catch (e) {
-                          setErrorMessage("Batch processing failed");
-                          setCurrentPage("error");
-                        } finally {
-                          setIsProcessing(false);
-                        }
-                      }
+                    ? handleBatchIdmcConvert
                     : selectedTab === "batch-human"
-                    ? async () => {
-                        if (!uploadedFile?.path || !fileStats) return;
-                        try {
-                          setIsProcessing(true);
-                          const resp = await idmcBatchSummary({
-                            inputType: "zip",
-                            zipPath: uploadedFile.path,
-                            outputFormat: batchOutputFormat,
-                          });
-                          if (resp?.zipFilename || resp?.zipFilePath) {
-                            setConvertedFile({
-                              success: true,
-                              message: resp.message || "completed",
-                              source: resp.source || "human",
-                              jobId: resp.jobId || "batch_human_zip",
-                              analysis: {
-                                totalFiles: resp.processing?.totalFiles || fileStats.totalFiles,
-                                oracleFiles: 0,
-                                solutionName: "",
-                                linesOfCode: fileStats.totalLines,
-                                fileSize: formatBytes(fileStats.totalSize),
-                                namespaces: [],
-                                classes: 0,
-                                dependencies: [],
-                              },
-                              conversion: {
-                                totalConverted: resp.processing?.processedFiles || fileStats.totalFiles,
-                                totalFiles: resp.processing?.totalFiles || fileStats.totalFiles,
-                                successRate: resp.processing?.successRate || 100,
-                                convertedFiles: [],
-                              },
-                              zipFilename: resp.zipFilename || (resp.zipFilePath ? resp.zipFilePath.split('/').pop() : undefined) || "human_output.zip",
-                            });
-                            setCurrentPage("result");
-                          } else {
-                            setCurrentPage("success");
-                          }
-                        } catch (e) {
-                          setErrorMessage("Batch processing failed");
-                          setCurrentPage("error");
-                        } finally {
-                          setIsProcessing(false);
-                        }
-                      }
+                    ? handleBatchHumanConvert
                     : handleZipConvert
                 }
               />
@@ -902,21 +1307,7 @@ const Dashboard: React.FC = () => {
           </div>
         )}
 
-        {isProcessing && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
-            <div className="bg-white rounded-xl shadow-2xl p-8 sm:p-12 max-w-xl w-full text-center">
-              <Loader2 className="w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-6 text-[#B978B2] animate-spin" />
-              <h3 className="text-md sm:text-3xl font-semibold text-gray-900 mb-3">
-                Analyzing dependencies...
-              </h3>
-              <p className="text-gray-600 mb-8">
-                Please wait while we analyze your code...
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* WebSocket progress for ZIP */}
+        {/* WebSocket progress for ZIP - takes priority over isProcessing */}
         {inputMode === "zip" && showZipOverlay && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-white/20 backdrop-blur-sm">
             <div className="bg-white rounded-xl shadow-2xl border border-gray-200 p-8 sm:p-12 w-11/12 max-w-2xl">
@@ -977,6 +1368,21 @@ const Dashboard: React.FC = () => {
                   </h3>
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Simple processing overlay - only show when WebSocket overlay is NOT active */}
+        {isProcessing && !showZipOverlay && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+            <div className="bg-white rounded-xl shadow-2xl p-8 sm:p-12 max-w-xl w-full text-center">
+              <Loader2 className="w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-6 text-[#B978B2] animate-spin" />
+              <h3 className="text-md sm:text-3xl font-semibold text-gray-900 mb-3">
+                Analyzing dependencies...
+              </h3>
+              <p className="text-gray-600 mb-8">
+                Please wait while we analyze your code...
+              </p>
             </div>
           </div>
         )}
@@ -1046,45 +1452,53 @@ const Dashboard: React.FC = () => {
                           </h4>
                         </div>
                         <div className="space-y-3 max-h-[55vh] overflow-y-auto pr-2 p-5">
-                          {convertedFile.conversion.convertedFiles.map(
-                            (file, idx) => (
-                              <div
-                                key={idx}
-                                className={`bg-white border-l-[3px] ${
-                                  expandedIndex === idx
-                                    ? "border-l-[#70CBCF]"
-                                    : "border-neutral-300"
-                                } rounded-lg p-4 mb-6 transition-all duration-200`}
-                              >
-                                <button
-                                  onClick={() =>
-                                    setExpandedIndex(
-                                      expandedIndex === idx ? null : idx
-                                    )
-                                  }
-                                  className="w-full flex items-center justify-between text-left"
+                          {!convertedFile?.conversion?.convertedFiles ||
+                          convertedFile.conversion.convertedFiles.length ===
+                            0 ? (
+                            <div className="text-center text-gray-500 py-8">
+                              <p>No original files to display</p>
+                            </div>
+                          ) : (
+                            convertedFile.conversion.convertedFiles.map(
+                              (file, idx) => (
+                                <div
+                                  key={idx}
+                                  className={`bg-white border-l-[3px] ${
+                                    expandedIndex === idx
+                                      ? "border-l-[#70CBCF]"
+                                      : "border-neutral-300"
+                                  } rounded-lg p-4 mb-6 transition-all duration-200`}
                                 >
-                                  <p className="font-mono text-sm font-medium text-gray-800 truncate">
-                                    {file.original}
-                                  </p>
-                                  <span className="text-neutral-500 font-bold text-lg ml-2">
-                                    {expandedIndex === idx ? (
-                                      <FaChevronUp />
-                                    ) : (
-                                      <FaChevronDown />
-                                    )}
-                                  </span>
-                                </button>
-                                {expandedIndex === idx && (
-                                  <div className="mt-3 animate-fadeIn">
-                                    <pre className="text-xs bg-white p-3 rounded overflow-x-auto max-h-40 overflow-y-auto">
-                                      <code className="text-gray-800">
-                                        {file.oracleContent}
-                                      </code>
-                                    </pre>
-                                  </div>
-                                )}
-                              </div>
+                                  <button
+                                    onClick={() =>
+                                      setExpandedIndex(
+                                        expandedIndex === idx ? null : idx
+                                      )
+                                    }
+                                    className="w-full flex items-center justify-between text-left"
+                                  >
+                                    <p className="font-mono text-sm font-medium text-gray-800 truncate">
+                                      {file.original}
+                                    </p>
+                                    <span className="text-neutral-500 font-bold text-lg ml-2">
+                                      {expandedIndex === idx ? (
+                                        <FaChevronUp />
+                                      ) : (
+                                        <FaChevronDown />
+                                      )}
+                                    </span>
+                                  </button>
+                                  {expandedIndex === idx && (
+                                    <div className="mt-3 animate-fadeIn">
+                                      <pre className="text-xs bg-white p-3 rounded overflow-x-auto max-h-40 overflow-y-auto">
+                                        <code className="text-gray-800">
+                                          {file.oracleContent}
+                                        </code>
+                                      </pre>
+                                    </div>
+                                  )}
+                                </div>
+                              )
                             )
                           )}
                         </div>
@@ -1096,45 +1510,53 @@ const Dashboard: React.FC = () => {
                           <h4 className="font-regular text-white">Converted</h4>
                         </div>
                         <div className="space-y-3 max-h-[55vh] overflow-y-auto pr-2 p-5">
-                          {convertedFile.conversion.convertedFiles.map(
-                            (file, idx) => (
-                              <div
-                                key={idx}
-                                className={`bg-white border-l-[3px] ${
-                                  expandedIndex === idx
-                                    ? "border-l-green-300"
-                                    : "border-l-green-100"
-                                } rounded-lg p-4 mb-6 transition-all duration-200`}
-                              >
-                                <button
-                                  onClick={() =>
-                                    setExpandedIndex(
-                                      expandedIndex === idx ? null : idx
-                                    )
-                                  }
-                                  className="w-full flex items-center justify-between text-left"
+                          {!convertedFile?.conversion?.convertedFiles ||
+                          convertedFile.conversion.convertedFiles.length ===
+                            0 ? (
+                            <div className="text-center text-gray-500 py-8">
+                              <p>No converted files to display</p>
+                            </div>
+                          ) : (
+                            convertedFile.conversion.convertedFiles.map(
+                              (file, idx) => (
+                                <div
+                                  key={idx}
+                                  className={`bg-white border-l-[3px] ${
+                                    expandedIndex === idx
+                                      ? "border-l-green-300"
+                                      : "border-l-green-100"
+                                  } rounded-lg p-4 mb-6 transition-all duration-200`}
                                 >
-                                  <p className="font-mono text-sm font-medium text-gray-800 truncate">
-                                    {file.converted}
-                                  </p>
-                                  <span className="text-neutral-500 font-bold text-lg ml-2">
-                                    {expandedIndex === idx ? (
-                                      <FaChevronUp />
-                                    ) : (
-                                      <FaChevronDown />
-                                    )}
-                                  </span>
-                                </button>
-                                {expandedIndex === idx && (
-                                  <div className="mt-3 animate-fadeIn">
-                                    <pre className="text-xs bg-white p-3 rounded overflow-x-auto max-h-40 overflow-y-auto">
-                                      <code className="text-gray-800">
-                                        {file.snowflakeContent}
-                                      </code>
-                                    </pre>
-                                  </div>
-                                )}
-                              </div>
+                                  <button
+                                    onClick={() =>
+                                      setExpandedIndex(
+                                        expandedIndex === idx ? null : idx
+                                      )
+                                    }
+                                    className="w-full flex items-center justify-between text-left"
+                                  >
+                                    <p className="font-mono text-sm font-medium text-gray-800 truncate">
+                                      {file.converted}
+                                    </p>
+                                    <span className="text-neutral-500 font-bold text-lg ml-2">
+                                      {expandedIndex === idx ? (
+                                        <FaChevronUp />
+                                      ) : (
+                                        <FaChevronDown />
+                                      )}
+                                    </span>
+                                  </button>
+                                  {expandedIndex === idx && (
+                                    <div className="mt-3 animate-fadeIn">
+                                      <pre className="text-xs bg-white p-3 rounded overflow-x-auto max-h-40 overflow-y-auto">
+                                        <code className="text-gray-800">
+                                          {file.snowflakeContent}
+                                        </code>
+                                      </pre>
+                                    </div>
+                                  )}
+                                </div>
+                              )
                             )
                           )}
                         </div>
