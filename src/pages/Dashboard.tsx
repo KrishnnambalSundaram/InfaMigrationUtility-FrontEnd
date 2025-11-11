@@ -18,8 +18,10 @@ import {
   fileUpload,
   idmcBatch,
   idmcBatchSummary,
+  idmcSummaryToJson,
   type BatchOutputFormat,
   type IdmcOutputFormat,
+  type IdmcSummaryToJsonResponse,
   type SingleOutputFile,
   type UnifiedResponse,
   type UnifiedSingleResponse,
@@ -79,7 +81,7 @@ type FileStats = {
   files: Array<{ name: string; size: number; lines: number }>;
 };
 
-type TabKey = "idmc-sql" | "snowflake" | "idmc-batch" | "batch-human";
+type TabKey = "idmc-sql" | "snowflake" | "idmc-batch" | "batch-human" | "idmc-to-json";
 
 type InputMode = "zip" | "single";
 
@@ -169,6 +171,8 @@ const Dashboard: React.FC = () => {
     setSingleFileName(
       selectedTab === "idmc-batch" || selectedTab === "batch-human"
         ? "run.sh"
+        : selectedTab === "idmc-to-json"
+        ? "mapping_summary.md"
         : "input.sql"
     );
   }, [selectedTab]);
@@ -208,6 +212,7 @@ const Dashboard: React.FC = () => {
   const isIdmcTab = selectedTab === "idmc-sql" || selectedTab === "idmc-batch";
   const isSnowflakeTab = selectedTab === "snowflake";
   const isBatchHuman = selectedTab === "batch-human";
+  const isIdmcToJsonTab = selectedTab === "idmc-to-json";
 
   const analyzeZipFile = async (file: File) => {
     try {
@@ -227,7 +232,13 @@ const Dashboard: React.FC = () => {
             filename.endsWith(".sql") || filename.endsWith(".plsql");
           const isShOrBat =
             filename.endsWith(".sh") || filename.endsWith(".bat");
-          if (isSql || isShOrBat) {
+          const isIdmcSummary =
+            filename.endsWith(".md") ||
+            filename.endsWith(".txt") ||
+            filename.endsWith(".json") ||
+            filename.toLowerCase().includes("idmc") ||
+            filename.toLowerCase().includes("summary");
+          if (isSql || isShOrBat || (isIdmcToJsonTab && isIdmcSummary)) {
             const content = await zipEntry.async("string");
             const size = content.length;
             const lines = countLines(content);
@@ -977,6 +988,227 @@ const Dashboard: React.FC = () => {
     }
   };
 
+  // IDMC Summary to JSON ZIP Convert via API + WebSocket
+  const handleIdmcToJsonZipConvert = async () => {
+    if (!uploadedFile?.path || !fileStats) return;
+
+    try {
+      finalizedRef.current = false;
+      setProgress(1);
+      setShowZipOverlay(true);
+      setErrorMessage("");
+      setCurrentStepText("");
+      setFilesConvertedCount(0);
+      setTotalFilesCount(0);
+      setElapsedMs(null);
+      setEtaMs(null);
+
+      const socket = connectSocket();
+      socket.off("progress-update");
+
+      let jobId: string | undefined = undefined;
+      let apiResponse: any = null;
+
+      // Set up WebSocket progress listener BEFORE API call
+      socket.on("progress-update", (data) => {
+        if (finalizedRef.current) return;
+
+        const computedProgress =
+          typeof data?.progress === "number"
+            ? data.progress
+            : typeof (data as any)?.percentage === "number"
+            ? (data as any).percentage
+            : data?.filesConverted && data?.totalFiles
+            ? Math.round(
+                (data.filesConverted / Math.max(1, data.totalFiles)) * 100
+              )
+            : progress;
+        setProgress(Math.max(1, Math.min(100, computedProgress || 1)));
+        if (!showZipOverlay) setShowZipOverlay(true);
+
+        if (typeof data?.currentStep === "string") {
+          setCurrentStepText(data.currentStep);
+        }
+        if (typeof data?.filesConverted === "number") {
+          setFilesConvertedCount(data.filesConverted);
+        }
+        if (typeof data?.totalFiles === "number") {
+          setTotalFilesCount(data.totalFiles);
+        }
+        if (typeof data?.elapsedTime === "number")
+          setElapsedMs(data.elapsedTime);
+        if (typeof data?.estimatedTime === "number")
+          setEtaMs(data.estimatedTime);
+
+        const completedStatus =
+          data?.status === "completed" || data?.status === "success";
+        const completedByProgress =
+          typeof data?.progress === "number" && data.progress >= 100;
+        const hasZip =
+          !!data?.result?.zipFilename ||
+          !!data?.zipFilename ||
+          !!apiResponse?.zipFilename;
+
+        if (completedStatus || completedByProgress || hasZip) {
+          let finalData: any = null;
+
+          if (
+            data?.result &&
+            (data.result.results || data.result.zipFilename)
+          ) {
+            finalData = data.result;
+          } else if (data?.results || data?.zipFilename) {
+            finalData = data;
+          } else if (apiResponse?.results && apiResponse?.zipFilename) {
+            finalData = apiResponse;
+          }
+
+          if (finalData && !finalizedRef.current) {
+            socket.off("progress-update");
+            socket.off("system-notification");
+            if (jobId) {
+              disconnectSocket(jobId);
+            }
+            activeJobIdRef.current = null;
+
+            finalizeIdmcToJson(finalData);
+          }
+        } else if (data?.status === "failed") {
+          setErrorMessage(data.error || "IDMC Summary to JSON conversion failed");
+          setShowZipOverlay(false);
+          setCurrentPage("error");
+          if (activeJobIdRef.current) {
+            disconnectSocket(activeJobIdRef.current);
+            activeJobIdRef.current = null;
+          }
+        }
+      });
+
+      socket.on("system-notification", (payload) => {
+        try {
+          const { type, message } = payload || {};
+          console.log("[system-notification]", type, message);
+        } catch (_) {}
+      });
+
+      // Call API endpoint: POST /api/idmc/summary-to-json
+      apiResponse = await idmcSummaryToJson({
+        zipFilePath: uploadedFile.path,
+      });
+
+      if (!apiResponse?.success) {
+        throw new Error(apiResponse?.message || "IDMC Summary to JSON conversion failed");
+      }
+
+      jobId = (apiResponse as any).jobId;
+      if (jobId) {
+        activeJobIdRef.current = jobId;
+      }
+
+      // If API already returned complete response, finalize immediately
+      if (
+        apiResponse?.success &&
+        (apiResponse as any)?.results &&
+        (apiResponse as any)?.zipFilename &&
+        !finalizedRef.current
+      ) {
+        socket.off("progress-update");
+        socket.off("system-notification");
+        if (jobId) {
+          disconnectSocket(jobId);
+        }
+        activeJobIdRef.current = null;
+
+        finalizeIdmcToJson(apiResponse);
+      }
+    } catch (error) {
+      console.error("IDMC Summary to JSON conversion error:", error);
+      setErrorMessage(
+        error instanceof Error ? error.message : "IDMC Summary to JSON conversion failed"
+      );
+      setShowZipOverlay(false);
+      setCurrentPage("error");
+      if (activeJobIdRef.current) {
+        disconnectSocket(activeJobIdRef.current);
+        activeJobIdRef.current = null;
+      }
+      finalizedRef.current = false;
+    }
+  };
+
+  // Finalize IDMC Summary to JSON conversion
+  const finalizeIdmcToJson = (response: any) => {
+    if (finalizedRef.current) return;
+    finalizedRef.current = true;
+
+    const zipFilename =
+      response.zipFilename ||
+      (response.zipFilePath
+        ? response.zipFilePath.split("/").pop()
+        : undefined);
+
+    const results = response.results || [];
+    const processing = response.processing || {
+      totalFiles: 0,
+      processedFiles: 0,
+      failedFiles: 0,
+      successRate: 0,
+    };
+
+    const mappedConvertedFiles = results
+      .filter((result: any) => result && result.fileName)
+      .map((result: any) => {
+        const originalContent = String(result.originalContent || "");
+        const convertedContent = String(result.convertedContent || "");
+        const fileName = String(result.fileName || "");
+
+        return {
+          original: fileName,
+          converted: `${fileName.replace(/\.(md|txt|json)$/i, "")}.bat`,
+          oracleContent: originalContent,
+          snowflakeContent: convertedContent,
+          targetFolder: result.targetFolder || "",
+        };
+      });
+
+    setConvertedFile({
+      success: true,
+      message: response.message || "completed",
+      source: response.source || "idmc-to-json",
+      jobId: response.jobId || "idmc_to_json_zip",
+      analysis: {
+        totalFiles: processing.totalFiles || fileStats?.totalFiles || 0,
+        oracleFiles: 0,
+        solutionName: "",
+        linesOfCode: fileStats?.totalLines || 0,
+        fileSize: formatBytes(fileStats?.totalSize || 0),
+        namespaces: [],
+        classes: 0,
+        dependencies: [],
+      },
+      conversion: {
+        totalConverted:
+          processing.processedFiles ||
+          mappedConvertedFiles.length ||
+          fileStats?.totalFiles ||
+          0,
+        totalFiles: processing.totalFiles || fileStats?.totalFiles || 0,
+        successRate: processing.successRate || 100,
+        convertedFiles: mappedConvertedFiles,
+      },
+      zipFilename: zipFilename || "idmc_mapping_bat.zip",
+    });
+
+    setProgress(100);
+    setShowZipOverlay(false);
+    setCurrentPage("result");
+
+    if (activeJobIdRef.current) {
+      disconnectSocket(activeJobIdRef.current);
+      activeJobIdRef.current = null;
+    }
+  };
+
   // SINGLE Convert via Unified API (no websocket)
   const handleSingleConvert = async () => {
     try {
@@ -1059,6 +1291,37 @@ const Dashboard: React.FC = () => {
           setSingleResult(res.summary);
         } else {
           setSingleResult("");
+        }
+      } else if (selectedTab === "idmc-to-json") {
+        // IDMC Summary to JSON conversion
+        const res = await idmcSummaryToJson({
+          sourceCode: singleSourceCode,
+          fileName: singleFileName,
+        });
+        if ("outputFiles" in res) {
+          setSingleOutputs(res.outputFiles || []);
+          setSingleResult(res.convertedContent || "");
+        } else {
+          // Fallback: try to create output file from response
+          if (res.convertedContent) {
+            setSingleResult(res.convertedContent);
+            // Try to extract file path from response if available
+            const outputFiles = (res as any).outputFiles || [];
+            if (outputFiles.length > 0) {
+              setSingleOutputs(outputFiles);
+            } else if ((res as any).filePath) {
+              setSingleOutputs([
+                {
+                  name: res.fileName || "idmc_mapping.bat",
+                  path: (res as any).filePath,
+                  mime: "application/x-bat",
+                  kind: "single",
+                },
+              ]);
+            }
+          } else {
+            setSingleResult(JSON.stringify(res, null, 2));
+          }
         }
       } else {
         // SQL -> IDMC or Oracle -> Snowflake
@@ -1202,6 +1465,7 @@ const Dashboard: React.FC = () => {
           {tabButton("snowflake", "Oracle SQL → Snowflake")}
           {tabButton("idmc-batch", "Batch Script → IDMC Summary")}
           {tabButton("batch-human", "Batch Script → Human Language")}
+          {tabButton("idmc-to-json", "IDMC Summary → JSON")}
         </div>
 
         {/* Mode toggle */}
@@ -1281,6 +1545,8 @@ const Dashboard: React.FC = () => {
                     ? handleBatchIdmcConvert
                     : selectedTab === "batch-human"
                     ? handleBatchHumanConvert
+                    : selectedTab === "idmc-to-json"
+                    ? handleIdmcToJsonZipConvert
                     : handleZipConvert
                 }
               />
@@ -1298,6 +1564,8 @@ const Dashboard: React.FC = () => {
                 placeholder={
                   isBatchHuman || selectedTab === "idmc-batch"
                     ? "Paste your .sh/.bat script here..."
+                    : selectedTab === "idmc-to-json"
+                    ? "Paste IDMC mapping summary here (markdown/text format)..."
                     : isSnowflakeTab
                     ? "Paste Oracle SQL/PLSQL here..."
                     : "Paste SQL for IDMC summary here (Oracle/Redshift)..."

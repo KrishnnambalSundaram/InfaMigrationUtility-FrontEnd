@@ -387,3 +387,67 @@ export const idmcBatchSummary = async (
   });
   return response.data;
 };
+
+// IDMC Summary to JSON API helpers
+export interface IdmcSummaryToJsonSingleRequest {
+  sourceCode: string;
+  fileName?: string;
+}
+
+export interface IdmcSummaryToJsonZipRequest {
+  zipFilePath: string;
+}
+
+export type IdmcSummaryToJsonRequest = IdmcSummaryToJsonSingleRequest | IdmcSummaryToJsonZipRequest;
+
+export interface IdmcSummaryToJsonSingleResponse {
+  success: boolean;
+  message: string;
+  fileName: string;
+  originalContent: string;
+  convertedContent: string;
+  outputFiles: Array<{
+    name: string;
+    path: string;
+    mime: string;
+    kind: 'single';
+  }>;
+}
+
+export interface IdmcSummaryToJsonZipResponse {
+  success: boolean;
+  message: string;
+  source: string;
+  jobId: string;
+  zipFilename: string;
+  zipFilePath: string;
+  results: Array<{
+    fileName: string;
+    originalContent: string;
+    convertedContent: string;
+    success: boolean;
+    targetFolder?: string;
+  }>;
+  processing: {
+    totalFiles: number;
+    processedFiles: number;
+    failedFiles: number;
+    successRate: number;
+  };
+}
+
+export type IdmcSummaryToJsonResponse = IdmcSummaryToJsonSingleResponse | IdmcSummaryToJsonZipResponse;
+
+// IDMC Summary to JSON API
+export const idmcSummaryToJson = async (
+  payload: IdmcSummaryToJsonRequest
+): Promise<IdmcSummaryToJsonResponse> => {
+  const token = localStorage.getItem('token') || '';
+  const response = await apiClient.post<IdmcSummaryToJsonResponse>('/idmc/summary-to-json', payload, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    }
+  });
+  return response.data;
+};
