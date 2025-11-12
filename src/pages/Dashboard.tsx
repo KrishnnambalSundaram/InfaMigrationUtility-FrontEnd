@@ -21,7 +21,6 @@ import {
   idmcSummaryToJson,
   type BatchOutputFormat,
   type IdmcOutputFormat,
-  type IdmcSummaryToJsonResponse,
   type SingleOutputFile,
   type UnifiedResponse,
   type UnifiedSingleResponse,
@@ -1298,30 +1297,14 @@ const Dashboard: React.FC = () => {
           sourceCode: singleSourceCode,
           fileName: singleFileName,
         });
+        // Type guard: single file response has outputFiles property
         if ("outputFiles" in res) {
+          // This is IdmcSummaryToJsonSingleResponse
           setSingleOutputs(res.outputFiles || []);
           setSingleResult(res.convertedContent || "");
         } else {
-          // Fallback: try to create output file from response
-          if (res.convertedContent) {
-            setSingleResult(res.convertedContent);
-            // Try to extract file path from response if available
-            const outputFiles = (res as any).outputFiles || [];
-            if (outputFiles.length > 0) {
-              setSingleOutputs(outputFiles);
-            } else if ((res as any).filePath) {
-              setSingleOutputs([
-                {
-                  name: res.fileName || "idmc_mapping.bat",
-                  path: (res as any).filePath,
-                  mime: "application/x-bat",
-                  kind: "single",
-                },
-              ]);
-            }
-          } else {
-            setSingleResult(JSON.stringify(res, null, 2));
-          }
+          // This should not happen for single file conversion, but handle gracefully
+          setSingleResult(JSON.stringify(res, null, 2));
         }
       } else {
         // SQL -> IDMC or Oracle -> Snowflake
