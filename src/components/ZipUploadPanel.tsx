@@ -45,7 +45,7 @@ const ZipUploadPanel: React.FC<Props> = ({
           <img src={Upload} alt="upload" className="h-22" />
           <input
             type="file"
-            accept=".zip"
+            accept=".zip,.sql,.txt,.bin,.md,.pls,.pkg,.prc,.fnc,.rs,.redshift"
             onChange={onFileInput}
             className="hidden"
           />
@@ -53,7 +53,7 @@ const ZipUploadPanel: React.FC<Props> = ({
         <p className="text-md mt-2 font-semibold text-gray-600">
           Drop your file here or Browse
         </p>
-        <p className="text-xs text-gray-500 mt-2 mb-5">Supports ZIP files</p>
+        <p className="text-xs text-gray-500 mt-2 mb-5">Supports ZIP files, SQL files (.sql, .pls, .pkg, .prc, .fnc, .rs, .redshift), Text files (.txt, .md), and Binary files (.bin)</p>
       </div>
 
       {selectedFile && fileStats && (

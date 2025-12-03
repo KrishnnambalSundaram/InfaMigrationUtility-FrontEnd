@@ -40,10 +40,15 @@ interface FilePathResponse {
 }
 
 
-export const fileUpload = async (zipFile: File): Promise<UploadResponse> => {
+export const fileUpload = async (file: File): Promise<UploadResponse> => {
   try {
     const formData = new FormData();
-    formData.append('zipFile', zipFile);
+    // Support both ZIP files (legacy) and single files (new)
+    if (file.name.endsWith('.zip')) {
+      formData.append('zipFile', file);
+    } else {
+      formData.append('file', file);
+    }
 
     const response = await apiClient.post<UploadResponse>('/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
@@ -138,6 +143,7 @@ export interface UnifiedZipRequest {
   target: UnifiedTarget;
   sourceType?: UnifiedSourceType;
   zipFilePath: string; // absolute path from upload response
+  customFileName?: string; // Optional: custom output file name
   outputFormat?: IdmcOutputFormat; // IDMC only
 }
 
@@ -147,6 +153,7 @@ export interface UnifiedSingleRequest {
   sourceType?: UnifiedSourceType;
   sourceCode: string;
   fileName: string;
+  customFileName?: string; // Optional: custom output file name
   outputFormat?: IdmcOutputFormat; // IDMC only
 }
 
@@ -389,13 +396,18 @@ export const idmcBatchSummary = async (
 };
 
 // IDMC Summary to JSON API helpers
+export type IdmcSummaryOutputFormat = 'bin' | 'txt' | 'doc';
+
 export interface IdmcSummaryToJsonSingleRequest {
   sourceCode: string;
   fileName?: string;
+  customFileName?: string; // Optional: custom output file name
+  outputFormat?: IdmcSummaryOutputFormat; // Default: "bin"
 }
 
 export interface IdmcSummaryToJsonZipRequest {
   zipFilePath: string;
+  customFileName?: string; // Optional: custom output ZIP name
 }
 
 export type IdmcSummaryToJsonRequest = IdmcSummaryToJsonSingleRequest | IdmcSummaryToJsonZipRequest;

@@ -21,6 +21,7 @@ import {
   idmcSummaryToJson,
   type BatchOutputFormat,
   type IdmcOutputFormat,
+  type IdmcSummaryOutputFormat,
   type SingleOutputFile,
   type UnifiedResponse,
   type UnifiedSingleResponse,
@@ -126,6 +127,10 @@ const Dashboard: React.FC = () => {
   // Output format for batch/human summaries
   const [batchOutputFormat, setBatchOutputFormat] =
     useState<BatchOutputFormat>("doc");
+  // Output format for IDMC Summary to JSON
+  const [idmcToJsonOutputFormat, setIdmcToJsonOutputFormat] = useState<'bin' | 'json' | 'all'>('bin');
+  // Custom file name for conversions
+  const [customFileName, setCustomFileName] = useState<string>("");
 
   // Reset UI to upload page when tab changes
   useEffect(() => {
@@ -174,6 +179,8 @@ const Dashboard: React.FC = () => {
         ? "mapping_summary.md"
         : "input.sql"
     );
+    // Clear custom file name
+    setCustomFileName("");
   }, [selectedTab]);
 
   const { logout } = useAuth();
@@ -234,7 +241,8 @@ const Dashboard: React.FC = () => {
           const isIdmcSummary =
             filename.endsWith(".md") ||
             filename.endsWith(".txt") ||
-            filename.endsWith(".json") ||
+            filename.endsWith(".bin") ||
+            filename.endsWith(".doc") ||
             filename.toLowerCase().includes("idmc") ||
             filename.toLowerCase().includes("summary");
           if (isSql || isShOrBat || (isIdmcToJsonTab && isIdmcSummary)) {
@@ -283,20 +291,27 @@ const Dashboard: React.FC = () => {
     const files = e.dataTransfer.files;
     if (files && files[0]) {
       const file = files[0];
-      if (file.name.endsWith(".zip")) {
-        const response = await fileUpload(file);
-        if (response?.success) {
-          setUploadedFile(response.file);
-          setSelectedFile(file);
+      // Support both ZIP files and single files
+      const response = await fileUpload(file);
+      if (response?.success) {
+        setUploadedFile(response.file);
+        setSelectedFile(file);
+        // Only analyze ZIP files
+        if (file.name.endsWith(".zip")) {
           analyzeZipFile(file);
         } else {
-          setErrorMessage("Please upload the file again!!");
-          setCurrentPage("error");
+          // For single files, create minimal file stats
+          const fileContent = await file.text();
+          setFileStats({
+            totalFilesinFile: 1,
+            totalFiles: 1,
+            totalSize: file.size,
+            totalLines: countLines(fileContent),
+            files: [{ name: file.name, size: file.size, lines: countLines(fileContent) }],
+          });
         }
       } else {
-        setErrorMessage(
-          "Please upload a ZIP file containing the correct scripts"
-        );
+        setErrorMessage("Please upload the file again!!");
         setCurrentPage("error");
       }
     }
@@ -306,20 +321,27 @@ const Dashboard: React.FC = () => {
     const files = e.target.files;
     if (files && files[0]) {
       const file = files[0];
-      if (file.name.endsWith(".zip")) {
-        const response = await fileUpload(file);
-        if (response?.success) {
-          setUploadedFile(response.file);
-          setSelectedFile(file);
+      // Support both ZIP files and single files
+      const response = await fileUpload(file);
+      if (response?.success) {
+        setUploadedFile(response.file);
+        setSelectedFile(file);
+        // Only analyze ZIP files
+        if (file.name.endsWith(".zip")) {
           analyzeZipFile(file);
         } else {
-          setErrorMessage("Please upload the file again!!");
-          setCurrentPage("error");
+          // For single files, create minimal file stats
+          const fileContent = await file.text();
+          setFileStats({
+            totalFilesinFile: 1,
+            totalFiles: 1,
+            totalSize: file.size,
+            totalLines: countLines(fileContent),
+            files: [{ name: file.name, size: file.size, lines: countLines(fileContent) }],
+          });
         }
       } else {
-        setErrorMessage(
-          "Please upload a ZIP file containing the correct scripts"
-        );
+        setErrorMessage("Please upload the file again!!");
         setCurrentPage("error");
       }
     }
@@ -397,6 +419,9 @@ const Dashboard: React.FC = () => {
       };
       if (target === "idmc") {
         payload.outputFormat = outputFormat;
+      }
+      if (customFileName && customFileName.trim()) {
+        payload.customFileName = customFileName.trim();
       }
 
       // Start unified conversion to get jobId and zipFilename
@@ -1091,9 +1116,13 @@ const Dashboard: React.FC = () => {
       });
 
       // Call API endpoint: POST /api/idmc/summary-to-json
-      apiResponse = await idmcSummaryToJson({
+      const idmcToJsonPayload: any = {
         zipFilePath: uploadedFile.path,
-      });
+      };
+      if (customFileName && customFileName.trim()) {
+        idmcToJsonPayload.customFileName = customFileName.trim();
+      }
+      apiResponse = await idmcSummaryToJson(idmcToJsonPayload);
 
       if (!apiResponse?.success) {
         throw new Error(apiResponse?.message || "IDMC Summary to JSON conversion failed");
@@ -1161,9 +1190,14 @@ const Dashboard: React.FC = () => {
         const convertedContent = String(result.convertedContent || "");
         const fileName = String(result.fileName || "");
 
+        // Determine output extension based on file name or default to .bin
+        // The API can return .bin, .txt, .doc, or combinations depending on outputFormat
+        // Extract the actual extension from the fileName if present
+        const match = fileName.match(/\.(bin|txt|doc)$/i);
+        const outputExt = match ? match[0] : '.bin';
         return {
           original: fileName,
-          converted: `${fileName.replace(/\.(md|txt|json)$/i, "")}.bat`,
+          converted: `${fileName.replace(/\.(md|txt|json|bin|doc)$/i, "")}${outputExt}`,
           oracleContent: originalContent,
           snowflakeContent: convertedContent,
           targetFolder: result.targetFolder || "",
@@ -1195,7 +1229,7 @@ const Dashboard: React.FC = () => {
         successRate: processing.successRate || 100,
         convertedFiles: mappedConvertedFiles,
       },
-      zipFilename: zipFilename || "idmc_mapping_bat.zip",
+      zipFilename: zipFilename || "idmc_mapping.zip",
     });
 
     setProgress(100);
@@ -1293,10 +1327,15 @@ const Dashboard: React.FC = () => {
         }
       } else if (selectedTab === "idmc-to-json") {
         // IDMC Summary to JSON conversion
-        const res = await idmcSummaryToJson({
+        const idmcToJsonPayload: any = {
           sourceCode: singleSourceCode,
           fileName: singleFileName,
-        });
+          outputFormat: idmcToJsonOutputFormat,
+        };
+        if (customFileName && customFileName.trim()) {
+          idmcToJsonPayload.customFileName = customFileName.trim();
+        }
+        const res = await idmcSummaryToJson(idmcToJsonPayload);
         // Type guard: single file response has outputFiles property
         if ("outputFiles" in res) {
           // This is IdmcSummaryToJsonSingleResponse
@@ -1316,6 +1355,9 @@ const Dashboard: React.FC = () => {
           fileName: singleFileName,
         };
         if (target === "idmc") payload.outputFormat = outputFormat;
+        if (customFileName && customFileName.trim()) {
+          payload.customFileName = customFileName.trim();
+        }
         const res = await convertUnified(payload);
         if ("outputFiles" in res) {
           const r = res as UnifiedSingleResponse & {
@@ -1421,6 +1463,7 @@ const Dashboard: React.FC = () => {
     setSingleSourceCode("");
     setSingleResult("");
     setShowZipOverlay(false);
+    setCustomFileName("");
     finalizedRef.current = false;
   };
 
@@ -1458,7 +1501,7 @@ const Dashboard: React.FC = () => {
               inputMode === "zip" ? "text-gray-900" : "text-gray-500"
             }`}
           >
-            ZIP
+            Upload File
           </span>
           <label className="relative inline-flex cursor-pointer items-center">
             <input
@@ -1476,7 +1519,7 @@ const Dashboard: React.FC = () => {
               inputMode === "single" ? "text-gray-900" : "text-gray-500"
             }`}
           >
-            Single
+            Upload Single File
           </span>
 
           {/* Top-level output format selection (conditional by tab) */}
@@ -1510,6 +1553,33 @@ const Dashboard: React.FC = () => {
               </select>
             </div>
           )}
+          {selectedTab === "idmc-to-json" && (
+            <div className="flex items-center gap-3 ml-6">
+              <label className="text-sm text-gray-700">Output format</label>
+              <select
+                value={idmcToJsonOutputFormat}
+                onChange={(e) =>
+                  setIdmcToJsonOutputFormat(e.target.value as IdmcSummaryOutputFormat)
+                }
+                className="border rounded-md px-3 py-2 text-sm"
+              >
+                <option value="bin">.bin</option>
+                <option value="txt">.txt</option>
+                <option value="doc">.doc</option>
+              </select>
+            </div>
+          )}
+          {/* Custom file name input */}
+          <div className="flex items-center gap-3 ml-6">
+            <label className="text-sm text-gray-700">Custom file name</label>
+            <input
+              type="text"
+              value={customFileName}
+              onChange={(e) => setCustomFileName(e.target.value)}
+              placeholder="Optional"
+              className="border rounded-md px-3 py-2 text-sm w-40"
+            />
+          </div>
         </div>
 
         {/* Content */}
