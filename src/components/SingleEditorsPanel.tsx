@@ -1,4 +1,3 @@
-import { Loader2 } from "lucide-react";
 import React from "react";
 
 type SingleOutputFile = {
@@ -9,83 +8,55 @@ type SingleOutputFile = {
 };
 
 type Props = {
-  singleFileName: string;
-  setSingleFileName: (v: string) => void;
   singleSourceCode: string;
   setSingleSourceCode: (v: string) => void;
   singleResult: string;
-  isConvertingSingle: boolean;
   singleOutputs: SingleOutputFile[];
-  onConvert: () => void;
   onDownload: () => void;
   placeholder: string;
 };
 
 const SingleEditorsPanel: React.FC<Props> = ({
-  singleFileName,
-  setSingleFileName,
   singleSourceCode,
   setSingleSourceCode,
   singleResult,
-  isConvertingSingle,
   singleOutputs,
-  onConvert,
   onDownload,
   placeholder,
 }) => {
   return (
-    <div className="bg-white rounded-2xl shadow p-4 md:p-6">
-      <div className="flex flex-col md:flex-row gap-4 items-stretch">
+    <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-6 md:p-8">
+      <div className="flex flex-col md:flex-row gap-6 items-stretch">
         <div className="flex-1 flex flex-col">
-          <input
-            value={singleFileName}
-            onChange={(e) => setSingleFileName(e.target.value)}
-            className="border rounded-md px-3 py-2 text-sm mb-2"
-            placeholder="file name (e.g. query.sql | run.sh)"
-          />
+          <label className="text-sm text-gray-700 manrope-medium font-semibold mb-2">
+            Input
+          </label>
           <textarea
             value={singleSourceCode}
             onChange={(e) => setSingleSourceCode(e.target.value)}
-            className="border rounded-md p-3 font-mono text-sm min-h-[320px] h-full"
+            className="border-2 border-gray-200 rounded-lg p-4 font-mono text-sm min-h-[320px] h-full focus:border-[#70CBCF] focus:ring-2 focus:ring-[#70CBCF]/20 transition-all duration-200 outline-none bg-white resize-none"
             placeholder={placeholder}
           />
         </div>
         <div className="flex-1 flex flex-col">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm text-gray-600">Output</span>
-            <div className="flex items-center gap-2">
-              {(singleOutputs.length > 0 ||
-                (singleResult && singleResult.trim().length > 0)) && (
-                <button
-                  onClick={onDownload}
-                  className="px-4 py-2 rounded-md border border-[#E46356] text-[#E46356] text-sm"
-                >
-                  Download
-                </button>
-              )}
+            <span className="text-sm text-gray-700 manrope-medium font-semibold">
+              Output
+            </span>
+            {(singleOutputs.length > 0 ||
+              (singleResult && singleResult.trim().length > 0)) && (
               <button
-                onClick={onConvert}
-                disabled={isConvertingSingle || !singleSourceCode}
-                className={`px-4 py-2 rounded-md text-white text-sm ${
-                  isConvertingSingle || !singleSourceCode
-                    ? "bg-[#E46356]/60"
-                    : "bg-[#E46356]"
-                }`}
+                onClick={onDownload}
+                className="px-5 py-2 rounded-lg border-2 border-[#E46356] text-[#E46356] text-sm hover:bg-[#E46356] hover:text-white transition-all duration-200 font-medium manrope-medium shadow-sm hover:shadow-md"
               >
-                {isConvertingSingle ? (
-                  <span className="inline-flex items-center gap-2">
-                    <Loader2 className="w-4 h-4 animate-spin" /> Converting
-                  </span>
-                ) : (
-                  "Convert"
-                )}
+                Download
               </button>
-            </div>
+            )}
           </div>
           <textarea
             value={singleResult}
             readOnly
-            className="border rounded-md p-3 font-mono text-sm min-h-[320px] h-full bg-neutral-50"
+            className="border-2 border-gray-200 rounded-lg p-4 font-mono text-sm min-h-[320px] h-full bg-gradient-to-br from-gray-50 to-neutral-50 resize-none"
             placeholder="Converted output will appear here..."
           />
         </div>

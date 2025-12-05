@@ -81,7 +81,12 @@ type FileStats = {
   files: Array<{ name: string; size: number; lines: number }>;
 };
 
-type TabKey = "idmc-sql" | "snowflake" | "idmc-batch" | "batch-human" | "idmc-to-json";
+type TabKey =
+  | "idmc-sql"
+  | "snowflake"
+  | "idmc-batch"
+  | "batch-human"
+  | "idmc-to-json";
 
 type InputMode = "zip" | "single";
 
@@ -117,7 +122,6 @@ const Dashboard: React.FC = () => {
 
   // Single-input editors
   const [singleSourceCode, setSingleSourceCode] = useState<string>("");
-  const [singleFileName, setSingleFileName] = useState<string>("input.sql");
   const [singleResult, setSingleResult] = useState<string>("");
   const [isConvertingSingle, setIsConvertingSingle] = useState<boolean>(false);
   const [singleOutputs, setSingleOutputs] = useState<SingleOutputFile[]>([]);
@@ -128,7 +132,8 @@ const Dashboard: React.FC = () => {
   const [batchOutputFormat, setBatchOutputFormat] =
     useState<BatchOutputFormat>("doc");
   // Output format for IDMC Summary to JSON
-  const [idmcToJsonOutputFormat, setIdmcToJsonOutputFormat] = useState<'bin' | 'json' | 'all'>('bin');
+  const [idmcToJsonOutputFormat, setIdmcToJsonOutputFormat] =
+    useState<IdmcSummaryOutputFormat>("bin");
   // Custom file name for conversions
   const [customFileName, setCustomFileName] = useState<string>("");
 
@@ -172,13 +177,6 @@ const Dashboard: React.FC = () => {
     setSingleResult("");
     setSingleOutputs([]);
     setIsConvertingSingle(false);
-    setSingleFileName(
-      selectedTab === "idmc-batch" || selectedTab === "batch-human"
-        ? "run.sh"
-        : selectedTab === "idmc-to-json"
-        ? "mapping_summary.md"
-        : "input.sql"
-    );
     // Clear custom file name
     setCustomFileName("");
   }, [selectedTab]);
@@ -307,7 +305,13 @@ const Dashboard: React.FC = () => {
             totalFiles: 1,
             totalSize: file.size,
             totalLines: countLines(fileContent),
-            files: [{ name: file.name, size: file.size, lines: countLines(fileContent) }],
+            files: [
+              {
+                name: file.name,
+                size: file.size,
+                lines: countLines(fileContent),
+              },
+            ],
           });
         }
       } else {
@@ -337,7 +341,13 @@ const Dashboard: React.FC = () => {
             totalFiles: 1,
             totalSize: file.size,
             totalLines: countLines(fileContent),
-            files: [{ name: file.name, size: file.size, lines: countLines(fileContent) }],
+            files: [
+              {
+                name: file.name,
+                size: file.size,
+                lines: countLines(fileContent),
+              },
+            ],
           });
         }
       } else {
@@ -1098,7 +1108,9 @@ const Dashboard: React.FC = () => {
             finalizeIdmcToJson(finalData);
           }
         } else if (data?.status === "failed") {
-          setErrorMessage(data.error || "IDMC Summary to JSON conversion failed");
+          setErrorMessage(
+            data.error || "IDMC Summary to JSON conversion failed"
+          );
           setShowZipOverlay(false);
           setCurrentPage("error");
           if (activeJobIdRef.current) {
@@ -1125,7 +1137,9 @@ const Dashboard: React.FC = () => {
       apiResponse = await idmcSummaryToJson(idmcToJsonPayload);
 
       if (!apiResponse?.success) {
-        throw new Error(apiResponse?.message || "IDMC Summary to JSON conversion failed");
+        throw new Error(
+          apiResponse?.message || "IDMC Summary to JSON conversion failed"
+        );
       }
 
       jobId = (apiResponse as any).jobId;
@@ -1152,7 +1166,9 @@ const Dashboard: React.FC = () => {
     } catch (error) {
       console.error("IDMC Summary to JSON conversion error:", error);
       setErrorMessage(
-        error instanceof Error ? error.message : "IDMC Summary to JSON conversion failed"
+        error instanceof Error
+          ? error.message
+          : "IDMC Summary to JSON conversion failed"
       );
       setShowZipOverlay(false);
       setCurrentPage("error");
@@ -1194,10 +1210,13 @@ const Dashboard: React.FC = () => {
         // The API can return .bin, .txt, .doc, or combinations depending on outputFormat
         // Extract the actual extension from the fileName if present
         const match = fileName.match(/\.(bin|txt|doc)$/i);
-        const outputExt = match ? match[0] : '.bin';
+        const outputExt = match ? match[0] : ".bin";
         return {
           original: fileName,
-          converted: `${fileName.replace(/\.(md|txt|json|bin|doc)$/i, "")}${outputExt}`,
+          converted: `${fileName.replace(
+            /\.(md|txt|json|bin|doc)$/i,
+            ""
+          )}${outputExt}`,
           oracleContent: originalContent,
           snowflakeContent: convertedContent,
           targetFolder: result.targetFolder || "",
@@ -1260,10 +1279,11 @@ const Dashboard: React.FC = () => {
 
       if (selectedTab === "idmc-batch") {
         // Single batch script to IDMC summary
+        const defaultFileName = customFileName.trim() || "run.sh";
         const res = await idmcBatch({
           inputType: "single",
           script: singleSourceCode,
-          name: singleFileName,
+          name: defaultFileName,
           outputFormat: batchOutputFormat,
         });
         // Try to capture downloadable outputs if provided by API
@@ -1293,10 +1313,11 @@ const Dashboard: React.FC = () => {
         }
       } else if (selectedTab === "batch-human") {
         // Human language summary of batch script
+        const defaultFileName = customFileName.trim() || "run.sh";
         const res = await idmcBatchSummary({
           inputType: "single",
           script: singleSourceCode,
-          name: singleFileName,
+          name: defaultFileName,
           outputFormat: batchOutputFormat,
         });
         // Try to capture downloadable outputs if provided by API
@@ -1327,14 +1348,12 @@ const Dashboard: React.FC = () => {
         }
       } else if (selectedTab === "idmc-to-json") {
         // IDMC Summary to JSON conversion
+        const defaultFileName = customFileName.trim() || "mapping_summary.md";
         const idmcToJsonPayload: any = {
           sourceCode: singleSourceCode,
-          fileName: singleFileName,
+          fileName: defaultFileName,
           outputFormat: idmcToJsonOutputFormat,
         };
-        if (customFileName && customFileName.trim()) {
-          idmcToJsonPayload.customFileName = customFileName.trim();
-        }
         const res = await idmcSummaryToJson(idmcToJsonPayload);
         // Type guard: single file response has outputFiles property
         if ("outputFiles" in res) {
@@ -1347,17 +1366,15 @@ const Dashboard: React.FC = () => {
         }
       } else {
         // SQL -> IDMC or Oracle -> Snowflake
+        const defaultFileName = customFileName.trim() || "input.sql";
         const payload: any = {
           inputType: "single",
           target,
           sourceType: "auto",
           sourceCode: singleSourceCode,
-          fileName: singleFileName,
+          fileName: defaultFileName,
         };
         if (target === "idmc") payload.outputFormat = outputFormat;
-        if (customFileName && customFileName.trim()) {
-          payload.customFileName = customFileName.trim();
-        }
         const res = await convertUnified(payload);
         if ("outputFiles" in res) {
           const r = res as UnifiedSingleResponse & {
@@ -1471,10 +1488,10 @@ const Dashboard: React.FC = () => {
     <button
       key={key}
       onClick={() => setSelectedTab(key)}
-      className={`px-4 py-2 rounded-full text-sm manrope-medium ${
+      className={`px-5 py-2.5 rounded-full text-sm manrope-medium transition-all duration-300 ${
         selectedTab === key
-          ? "bg-[#E46356] text-white"
-          : "bg-white border border-neutral-300 text-gray-700"
+          ? "bg-gradient-to-r from-[#E46356] to-[#B978B2] text-white shadow-lg shadow-[#E46356]/30 transform scale-105"
+          : "bg-white border border-neutral-300 text-gray-700 hover:border-[#E46356]/50 hover:bg-gray-50 hover:shadow-md"
       }`}
     >
       {label}
@@ -1482,11 +1499,11 @@ const Dashboard: React.FC = () => {
   );
 
   return (
-    <div className="min-h-screen w-screen bg-gray-50 flex flex-col manrope-regular">
+    <div className="min-h-screen w-screen bg-gradient-to-br from-gray-50 via-white to-blue-50/20 flex flex-col manrope-regular">
       <Header handleReset={() => handleReset()} />
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
         {/* Tabs */}
-        <div className="flex flex-wrap gap-2 mb-6">
+        <div className="flex flex-wrap gap-3 mb-8">
           {tabButton("idmc-sql", "Oracle/Redshift SQL → IDMC Summary")}
           {tabButton("snowflake", "Oracle SQL → Snowflake")}
           {tabButton("idmc-batch", "Batch Script → IDMC Summary")}
@@ -1495,13 +1512,13 @@ const Dashboard: React.FC = () => {
         </div>
 
         {/* Mode toggle */}
-        <div className="flex items-center gap-3 mb-6 flex-wrap">
+        <div className="flex items-center gap-3 mb-8 flex-wrap bg-white p-5 rounded-xl shadow-md border border-gray-200">
           <span
-            className={`text-sm ${
+            className={`text-sm manrope-medium transition-colors duration-200 ${
               inputMode === "zip" ? "text-gray-900" : "text-gray-500"
             }`}
           >
-            Upload File
+            Upload
           </span>
           <label className="relative inline-flex cursor-pointer items-center">
             <input
@@ -1512,26 +1529,28 @@ const Dashboard: React.FC = () => {
                 setInputMode(inputMode === "zip" ? "single" : "zip")
               }
             />
-            <div className="peer h-6 w-11 rounded-full bg-gray-200 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:bg-white after:transition-all peer-checked:bg-[#E46356] peer-checked:after:translate-x-full"></div>
+            <div className="peer h-6 w-11 rounded-full bg-gray-200 shadow-inner after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:bg-white after:shadow-md after:transition-all peer-checked:bg-gradient-to-r peer-checked:from-[#E46356] peer-checked:to-[#B978B2] peer-checked:after:translate-x-full"></div>
           </label>
           <span
-            className={`text-sm ${
+            className={`text-sm manrope-medium transition-colors duration-200 ${
               inputMode === "single" ? "text-gray-900" : "text-gray-500"
             }`}
           >
-            Upload Single File
+            Single
           </span>
 
           {/* Top-level output format selection (conditional by tab) */}
           {selectedTab === "idmc-sql" && (
             <div className="flex items-center gap-3 ml-6">
-              <label className="text-sm text-gray-700">Output format</label>
+              <label className="text-sm text-gray-700 manrope-medium">
+                Output format
+              </label>
               <select
                 value={outputFormat}
                 onChange={(e) =>
                   setOutputFormat(e.target.value as IdmcOutputFormat)
                 }
-                className="border rounded-md px-3 py-2 text-sm"
+                className="border border-gray-300 rounded-lg px-4 py-2 text-sm bg-white hover:border-[#E46356]/50 focus:border-[#E46356] focus:ring-2 focus:ring-[#E46356]/20 transition-all duration-200 outline-none cursor-pointer"
               >
                 <option value="json">JSON</option>
                 <option value="docx">DOCX</option>
@@ -1540,13 +1559,15 @@ const Dashboard: React.FC = () => {
           )}
           {(selectedTab === "idmc-batch" || selectedTab === "batch-human") && (
             <div className="flex items-center gap-3 ml-6">
-              <label className="text-sm text-gray-700">Output format</label>
+              <label className="text-sm text-gray-700 manrope-medium">
+                Output format
+              </label>
               <select
                 value={batchOutputFormat}
                 onChange={(e) =>
                   setBatchOutputFormat(e.target.value as BatchOutputFormat)
                 }
-                className="border rounded-md px-3 py-2 text-sm"
+                className="border border-gray-300 rounded-lg px-4 py-2 text-sm bg-white hover:border-[#E46356]/50 focus:border-[#E46356] focus:ring-2 focus:ring-[#E46356]/20 transition-all duration-200 outline-none cursor-pointer"
               >
                 <option value="doc">DOC (.docx)</option>
                 <option value="txt">TXT (.txt)</option>
@@ -1555,13 +1576,17 @@ const Dashboard: React.FC = () => {
           )}
           {selectedTab === "idmc-to-json" && (
             <div className="flex items-center gap-3 ml-6">
-              <label className="text-sm text-gray-700">Output format</label>
+              <label className="text-sm text-gray-700 manrope-medium">
+                Output format
+              </label>
               <select
                 value={idmcToJsonOutputFormat}
                 onChange={(e) =>
-                  setIdmcToJsonOutputFormat(e.target.value as IdmcSummaryOutputFormat)
+                  setIdmcToJsonOutputFormat(
+                    e.target.value as IdmcSummaryOutputFormat
+                  )
                 }
-                className="border rounded-md px-3 py-2 text-sm"
+                className="border border-gray-300 rounded-lg px-4 py-2 text-sm bg-white hover:border-[#E46356]/50 focus:border-[#E46356] focus:ring-2 focus:ring-[#E46356]/20 transition-all duration-200 outline-none cursor-pointer"
               >
                 <option value="bin">.bin</option>
                 <option value="txt">.txt</option>
@@ -1571,15 +1596,40 @@ const Dashboard: React.FC = () => {
           )}
           {/* Custom file name input */}
           <div className="flex items-center gap-3 ml-6">
-            <label className="text-sm text-gray-700">Custom file name</label>
+            <label className="text-sm text-gray-700 manrope-medium">
+              Custom file name
+            </label>
             <input
               type="text"
               value={customFileName}
               onChange={(e) => setCustomFileName(e.target.value)}
               placeholder="Optional"
-              className="border rounded-md px-3 py-2 text-sm w-40"
+              className="border border-gray-300 rounded-lg px-4 py-2 text-sm w-40 bg-white hover:border-[#E46356]/50 focus:border-[#E46356] focus:ring-2 focus:ring-[#E46356]/20 transition-all duration-200 outline-none"
             />
           </div>
+
+          {/* Convert button for single file mode */}
+          {inputMode === "single" && (
+            <div className="flex items-center gap-3 ml-auto">
+              <button
+                onClick={handleSingleConvert}
+                disabled={isConvertingSingle || !singleSourceCode.trim()}
+                className={`px-6 py-2.5 rounded-lg text-white text-sm transition-all duration-200 font-semibold manrope-medium shadow-md hover:shadow-lg ${
+                  isConvertingSingle || !singleSourceCode.trim()
+                    ? "bg-gradient-to-r from-[#E46356]/60 to-[#B978B2]/60 cursor-not-allowed"
+                    : "bg-gradient-to-r from-[#E46356] to-[#B978B2] hover:from-[#D8554A] hover:to-[#A869A0] transform hover:scale-105"
+                }`}
+              >
+                {isConvertingSingle ? (
+                  <span className="inline-flex items-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin" /> Converting
+                  </span>
+                ) : (
+                  "Convert"
+                )}
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Content */}
@@ -1605,14 +1655,10 @@ const Dashboard: React.FC = () => {
               />
             ) : (
               <SingleEditorsPanel
-                singleFileName={singleFileName}
-                setSingleFileName={setSingleFileName}
                 singleSourceCode={singleSourceCode}
                 setSingleSourceCode={setSingleSourceCode}
                 singleResult={singleResult}
-                isConvertingSingle={isConvertingSingle}
                 singleOutputs={singleOutputs}
-                onConvert={handleSingleConvert}
                 onDownload={handleSingleDownload}
                 placeholder={
                   isBatchHuman || selectedTab === "idmc-batch"
@@ -1630,10 +1676,10 @@ const Dashboard: React.FC = () => {
 
         {/* WebSocket progress for ZIP - takes priority over isProcessing */}
         {inputMode === "zip" && showZipOverlay && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-white/20 backdrop-blur-sm">
-            <div className="bg-white rounded-xl shadow-2xl border border-gray-200 p-8 sm:p-12 w-11/12 max-w-2xl">
-              <div className="flex flex-col text-center items-center gap-3">
-                <div className="flex justify-center items-center h-16 w-16 rounded-full bg-white shadow-black/20 shadow-xl">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-md animate-fadeIn">
+            <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 p-10 sm:p-12 w-11/12 max-w-2xl">
+              <div className="flex flex-col text-center items-center gap-4">
+                <div className="flex justify-center items-center h-20 w-20 rounded-full bg-gradient-to-br from-blue-50 to-cyan-50 shadow-lg mb-2">
                   <img
                     src={
                       progress < 30
@@ -1642,26 +1688,26 @@ const Dashboard: React.FC = () => {
                         ? processing
                         : done
                     }
-                    className="h-8"
+                    className="h-10"
                   />
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-3 mb-3 mt-5 overflow-hidden">
+                <div className="w-full bg-gray-200 rounded-full h-4 mb-4 overflow-hidden shadow-inner">
                   <div
-                    className="bg-[linear-gradient(90.04deg,_#E46356_0.1%,_#B978B2_25.01%,_#70CBCF_49.91%,_#E7E62A_99.73%)] h-3 rounded-full transition-all duration-300"
+                    className="bg-[linear-gradient(90.04deg,_#E46356_0.1%,_#B978B2_25.01%,_#70CBCF_49.91%,_#E7E62A_99.73%)] h-4 rounded-full transition-all duration-300 shadow-sm"
                     style={{ width: `${Math.max(progress, 1)}%` }}
                   />
                 </div>
-                <div className="flex flex-col items-center gap-1">
-                  <p className="text-xs text-gray-700">
+                <div className="flex flex-col items-center gap-2">
+                  <p className="text-sm font-semibold text-gray-800 manrope-semibold">
                     {Math.round(Math.max(progress, 1))}% Complete
                     {totalFilesCount > 0 && (
-                      <span className="text-gray-500">
+                      <span className="text-gray-600 font-normal">
                         {" "}
                         · {filesConvertedCount}/{totalFilesCount} files
                       </span>
                     )}
                     {(elapsedMs !== null || etaMs !== null) && (
-                      <span className="text-gray-500">
+                      <span className="text-gray-600 font-normal">
                         {" "}
                         ·{" "}
                         {elapsedMs !== null
@@ -1679,7 +1725,7 @@ const Dashboard: React.FC = () => {
                       </span>
                     )}
                   </p>
-                  <h3 className="manrope-medium text-sm sm:text-md text-gray-900">
+                  <h3 className="manrope-semibold text-base sm:text-lg text-gray-900">
                     {currentStepText ||
                       (progress < 30
                         ? "Initializing..."
@@ -1695,13 +1741,15 @@ const Dashboard: React.FC = () => {
 
         {/* Simple processing overlay - only show when WebSocket overlay is NOT active */}
         {isProcessing && !showZipOverlay && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
-            <div className="bg-white rounded-xl shadow-2xl p-8 sm:p-12 max-w-xl w-full text-center">
-              <Loader2 className="w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-6 text-[#B978B2] animate-spin" />
-              <h3 className="text-md sm:text-3xl font-semibold text-gray-900 mb-3">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-md animate-fadeIn">
+            <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 p-10 sm:p-12 max-w-xl w-full text-center">
+              <div className="h-20 w-20 mx-auto mb-6 rounded-full bg-gradient-to-br from-purple-50 to-pink-50 flex items-center justify-center">
+                <Loader2 className="w-12 h-12 text-[#B978B2] animate-spin" />
+              </div>
+              <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mb-3 manrope-bold">
                 Analyzing dependencies...
               </h3>
-              <p className="text-gray-600 mb-8">
+              <p className="text-gray-600 mb-8 manrope-regular">
                 Please wait while we analyze your code...
               </p>
             </div>
@@ -1712,33 +1760,39 @@ const Dashboard: React.FC = () => {
         {currentPage === "result" && convertedFile && (
           <div className="space-y-6">
             <div className="flex flex-col items-center">
-              <div className="flex flex-col sm:flex-row items-center max-w-4xl bg-white justify-center mb-6 gap-4 p-10 shadow-lg rounded-xl">
-                <div className="flex flex-col justify-center gap-3">
-                  <img src={FinalSuccess} alt="final" className="h-16" />
-                  <h3 className="text-2xl text-gray-900 mb-2 text-center manrope-medium">
-                    Conversion Complete!
-                  </h3>
-                  <h1 className="text-center text-md">Your files are ready.</h1>
+              <div className="flex flex-col sm:flex-row items-center max-w-4xl bg-gradient-to-br from-white to-gray-50/50 justify-center mb-8 gap-6 p-12 shadow-xl rounded-2xl border border-gray-100">
+                <div className="flex flex-col justify-center items-center gap-4">
+                  <div className="h-20 w-20 rounded-full bg-gradient-to-br from-green-100 to-emerald-100 flex items-center justify-center shadow-lg">
+                    <img src={FinalSuccess} alt="final" className="h-12" />
+                  </div>
+                  <div className="text-center">
+                    <h3 className="text-3xl font-bold text-gray-900 mb-2 manrope-bold">
+                      Conversion Complete!
+                    </h3>
+                    <p className="text-lg text-gray-600 manrope-regular">
+                      Your files are ready for download.
+                    </p>
+                  </div>
                 </div>
               </div>
-              <div className="flex gap-3 min-w-xl ml-[-10px]">
+              <div className="flex gap-4 min-w-xl ml-[-10px]">
                 <button
                   onClick={() => setShowPreview(!showPreview)}
-                  className="flex-1 sm:flex-none px-6 py-3 w-[40%] bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition font-medium flex items-center justify-center gap-2"
+                  className="flex-1 sm:flex-none px-6 py-3 w-[40%] bg-white border-2 border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 hover:border-gray-300 hover:shadow-md transition-all duration-200 font-medium flex items-center justify-center gap-2 manrope-medium"
                 >
                   <Eye className="w-5 h-5" />
                   {showPreview ? "Hide" : "Preview"}
                 </button>
                 <button
                   onClick={handleReset}
-                  className="flex-1 sm:flex-none px-6 py-3 w-[30%] border border-[#E46356] text-[#E46356] rounded-lg hover:bg-red-50 transition font-medium flex items-center justify-center gap-2"
+                  className="flex-1 sm:flex-none px-6 py-3 w-[30%] border-2 border-[#E46356] text-[#E46356] rounded-xl hover:bg-[#E46356] hover:text-white transition-all duration-200 font-medium flex items-center justify-center gap-2 manrope-medium shadow-sm hover:shadow-md"
                 >
                   <IoIosRepeat className="w-5 h-5" />
                   Reconvert
                 </button>
                 <button
                   onClick={handleDownload}
-                  className="flex-1 sm:flex-none px-6 py-3 w-[30%] bg-[#E46356] text-white rounded-lg transition font-medium flex items-center justify-center gap-2 shadow-lg"
+                  className="flex-1 sm:flex-none px-6 py-3 w-[30%] bg-gradient-to-r from-[#E46356] to-[#B978B2] text-white rounded-xl hover:from-[#D8554A] hover:to-[#A869A0] transition-all duration-200 font-medium flex items-center justify-center gap-2 shadow-lg shadow-[#E46356]/30 hover:shadow-xl hover:shadow-[#E46356]/40 transform hover:scale-105 manrope-medium"
                 >
                   <Download className="w-5 h-5" />
                   Download
@@ -1749,151 +1803,166 @@ const Dashboard: React.FC = () => {
 
               {/* Preview modal for converted files if available */}
               {showPreview && convertedFile && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm px-4">
-                  <div className="relative bg-white rounded-2xl shadow-2xl border border-gray-200 w-full max-w-6xl max-h-[90vh] overflow-y-auto p-6">
-                    <button
-                      onClick={() => setShowPreview(false)}
-                      className="absolute top-4 right-4 text-gray-500 hover:text-gray-700 text-xl font-bold"
-                    >
-                      ✕
-                    </button>
-
-                    <h3 className="text-2xl manrope-semibold text-gray-900 mb-2 text-center">
-                      Preview
-                    </h3>
-                    <h1 className="w-full text-center text-sm mb-5 manrope-regular">
-                      Review a subset of original and converted outputs
-                    </h1>
-                    <div className="grid lg:grid-cols-2 gap-6">
-                      <div className="bg-neutral-50 rounded-2xl max-h-[66vh]">
-                        <div className="flex items-center gap-2 mb-3 p-3 bg-neutral-200 rounded-t-2xl">
-                          <IoCodeSlash />
-                          <h4 className="font-regular text-gray-900">
-                            Original
-                          </h4>
-                        </div>
-                        <div className="space-y-3 max-h-[55vh] overflow-y-auto pr-2 p-5">
-                          {!convertedFile?.conversion?.convertedFiles ||
-                          convertedFile.conversion.convertedFiles.length ===
-                            0 ? (
-                            <div className="text-center text-gray-500 py-8">
-                              <p>No original files to display</p>
-                            </div>
-                          ) : (
-                            convertedFile.conversion.convertedFiles.map(
-                              (file, idx) => (
-                                <div
-                                  key={idx}
-                                  className={`bg-white border-l-[3px] ${
-                                    expandedIndex === idx
-                                      ? "border-l-[#70CBCF]"
-                                      : "border-neutral-300"
-                                  } rounded-lg p-4 mb-6 transition-all duration-200`}
-                                >
-                                  <button
-                                    onClick={() =>
-                                      setExpandedIndex(
-                                        expandedIndex === idx ? null : idx
-                                      )
-                                    }
-                                    className="w-full flex items-center justify-between text-left"
-                                  >
-                                    <p className="font-mono text-sm font-medium text-gray-800 truncate">
-                                      {file.original}
-                                    </p>
-                                    <span className="text-neutral-500 font-bold text-lg ml-2">
-                                      {expandedIndex === idx ? (
-                                        <FaChevronUp />
-                                      ) : (
-                                        <FaChevronDown />
-                                      )}
-                                    </span>
-                                  </button>
-                                  {expandedIndex === idx && (
-                                    <div className="mt-3 animate-fadeIn">
-                                      <pre className="text-xs bg-white p-3 rounded overflow-x-auto max-h-40 overflow-y-auto">
-                                        <code className="text-gray-800">
-                                          {file.oracleContent}
-                                        </code>
-                                      </pre>
-                                    </div>
-                                  )}
-                                </div>
-                              )
-                            )
-                          )}
-                        </div>
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-md px-4 animate-fadeIn">
+                  <div className="relative bg-white rounded-2xl shadow-2xl border border-gray-200 w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
+                    {/* Modal Header */}
+                    <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-gradient-to-r from-gray-50 to-white">
+                      <div>
+                        <h3 className="text-2xl font-bold text-gray-900 manrope-bold">
+                          Preview
+                        </h3>
+                        <p className="text-sm text-gray-600 mt-1 manrope-regular">
+                          Review original and converted outputs
+                        </p>
                       </div>
+                      <button
+                        onClick={() => setShowPreview(false)}
+                        className="h-10 w-10 rounded-lg flex items-center justify-center text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-all duration-200 text-xl font-semibold"
+                      >
+                        ✕
+                      </button>
+                    </div>
 
-                      <div className="bg-neutral-50 rounded-2xl max-h-[66vh]">
-                        <div className="flex items-center gap-2 mb-3 p-3 bg-black rounded-t-2xl">
-                          <FaFileLines className="text-white" />
-                          <h4 className="font-regular text-white">Converted</h4>
-                        </div>
-                        <div className="space-y-3 max-h-[55vh] overflow-y-auto pr-2 p-5">
-                          {!convertedFile?.conversion?.convertedFiles ||
-                          convertedFile.conversion.convertedFiles.length ===
-                            0 ? (
-                            <div className="text-center text-gray-500 py-8">
-                              <p>No converted files to display</p>
+                    {/* Modal Content */}
+                    <div className="overflow-y-auto p-6 flex-1">
+                      <div className="grid lg:grid-cols-2 gap-6">
+                        <div className="bg-gradient-to-br from-gray-50 to-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                          <div className="flex items-center gap-3 mb-0 p-4 bg-gradient-to-r from-blue-50 to-cyan-50 border-b border-gray-200">
+                            <div className="h-8 w-8 rounded-lg bg-blue-100 flex items-center justify-center">
+                              <IoCodeSlash className="text-blue-600" />
                             </div>
-                          ) : (
-                            convertedFile.conversion.convertedFiles.map(
-                              (file, idx) => (
-                                <div
-                                  key={idx}
-                                  className={`bg-white border-l-[3px] ${
-                                    expandedIndex === idx
-                                      ? "border-l-green-300"
-                                      : "border-l-green-100"
-                                  } rounded-lg p-4 mb-6 transition-all duration-200`}
-                                >
-                                  <button
-                                    onClick={() =>
-                                      setExpandedIndex(
-                                        expandedIndex === idx ? null : idx
-                                      )
-                                    }
-                                    className="w-full flex items-center justify-between text-left"
+                            <h4 className="font-semibold text-gray-900 manrope-semibold">
+                              Original
+                            </h4>
+                          </div>
+                          <div className="space-y-3 max-h-[55vh] overflow-y-auto p-5">
+                            {!convertedFile?.conversion?.convertedFiles ||
+                            convertedFile.conversion.convertedFiles.length ===
+                              0 ? (
+                              <div className="text-center text-gray-500 py-8">
+                                <p>No original files to display</p>
+                              </div>
+                            ) : (
+                              convertedFile.conversion.convertedFiles.map(
+                                (file, idx) => (
+                                  <div
+                                    key={idx}
+                                    className={`bg-white border-l-4 ${
+                                      expandedIndex === idx
+                                        ? "border-l-[#70CBCF] shadow-md"
+                                        : "border-gray-300"
+                                    } rounded-lg p-4 mb-4 transition-all duration-200 hover:shadow-sm`}
                                   >
-                                    <p className="font-mono text-sm font-medium text-gray-800 truncate">
-                                      {file.converted}
-                                    </p>
-                                    <span className="text-neutral-500 font-bold text-lg ml-2">
-                                      {expandedIndex === idx ? (
-                                        <FaChevronUp />
-                                      ) : (
-                                        <FaChevronDown />
-                                      )}
-                                    </span>
-                                  </button>
-                                  {expandedIndex === idx && (
-                                    <div className="mt-3 animate-fadeIn">
-                                      <pre className="text-xs bg-white p-3 rounded overflow-x-auto max-h-40 overflow-y-auto">
-                                        <code className="text-gray-800">
-                                          {file.snowflakeContent}
-                                        </code>
-                                      </pre>
-                                    </div>
-                                  )}
-                                </div>
+                                    <button
+                                      onClick={() =>
+                                        setExpandedIndex(
+                                          expandedIndex === idx ? null : idx
+                                        )
+                                      }
+                                      className="w-full flex items-center justify-between text-left group"
+                                    >
+                                      <p className="font-mono text-sm font-semibold text-gray-800 truncate manrope-medium">
+                                        {file.original}
+                                      </p>
+                                      <span className="text-gray-400 group-hover:text-[#70CBCF] transition-colors duration-200 ml-2">
+                                        {expandedIndex === idx ? (
+                                          <FaChevronUp />
+                                        ) : (
+                                          <FaChevronDown />
+                                        )}
+                                      </span>
+                                    </button>
+                                    {expandedIndex === idx && (
+                                      <div className="mt-4 animate-fadeIn border-t border-gray-100 pt-3">
+                                        <pre className="text-xs bg-gray-50 border border-gray-200 p-4 rounded-lg overflow-x-auto max-h-40 overflow-y-auto">
+                                          <code className="text-gray-800 font-mono">
+                                            {file.oracleContent}
+                                          </code>
+                                        </pre>
+                                      </div>
+                                    )}
+                                  </div>
+                                )
                               )
-                            )
-                          )}
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="bg-gradient-to-br from-gray-50 to-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                          <div className="flex items-center gap-3 mb-0 p-4 bg-gradient-to-r from-[#E46356] to-[#B978B2] border-b border-[#E46356]/20">
+                            <div className="h-8 w-8 rounded-lg bg-white/20 flex items-center justify-center">
+                              <FaFileLines className="text-white" />
+                            </div>
+                            <h4 className="font-semibold text-white manrope-semibold">
+                              Converted
+                            </h4>
+                          </div>
+                          <div className="space-y-3 max-h-[55vh] overflow-y-auto p-5">
+                            {!convertedFile?.conversion?.convertedFiles ||
+                            convertedFile.conversion.convertedFiles.length ===
+                              0 ? (
+                              <div className="text-center text-gray-500 py-8">
+                                <p>No converted files to display</p>
+                              </div>
+                            ) : (
+                              convertedFile.conversion.convertedFiles.map(
+                                (file, idx) => (
+                                  <div
+                                    key={idx}
+                                    className={`bg-white border-l-4 ${
+                                      expandedIndex === idx
+                                        ? "border-l-green-500 shadow-md"
+                                        : "border-l-green-200"
+                                    } rounded-lg p-4 mb-4 transition-all duration-200 hover:shadow-sm`}
+                                  >
+                                    <button
+                                      onClick={() =>
+                                        setExpandedIndex(
+                                          expandedIndex === idx ? null : idx
+                                        )
+                                      }
+                                      className="w-full flex items-center justify-between text-left group"
+                                    >
+                                      <p className="font-mono text-sm font-semibold text-gray-800 truncate manrope-medium">
+                                        {file.converted}
+                                      </p>
+                                      <span className="text-gray-400 group-hover:text-green-500 transition-colors duration-200 ml-2">
+                                        {expandedIndex === idx ? (
+                                          <FaChevronUp />
+                                        ) : (
+                                          <FaChevronDown />
+                                        )}
+                                      </span>
+                                    </button>
+                                    {expandedIndex === idx && (
+                                      <div className="mt-4 animate-fadeIn border-t border-gray-100 pt-3">
+                                        <pre className="text-xs bg-gray-50 border border-gray-200 p-4 rounded-lg overflow-x-auto max-h-40 overflow-y-auto">
+                                          <code className="text-gray-800 font-mono">
+                                            {file.snowflakeContent}
+                                          </code>
+                                        </pre>
+                                      </div>
+                                    )}
+                                  </div>
+                                )
+                              )
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
-                    <div className="flex flex-row items-center justify-center mt-4 gap-5">
+                    {/* Modal Footer */}
+                    <div className="flex flex-row items-center justify-center gap-4 p-6 border-t border-gray-200 bg-gray-50">
                       <button
                         onClick={() => setCurrentPage("upload")}
-                        className="w-[30%] px-6 py-3 border border-[#E46356] text-[#E46356] rounded-lg transition font-medium flex items-center justify-center gap-2 shadow-lg"
+                        className="flex-1 px-6 py-3 border-2 border-[#E46356] text-[#E46356] rounded-xl hover:bg-[#E46356] hover:text-white transition-all duration-200 font-semibold flex items-center justify-center gap-2 shadow-sm hover:shadow-md manrope-medium"
                       >
-                        <IoIosRepeat className="w-6 h-6" />
+                        <IoIosRepeat className="w-5 h-5" />
                         Reconvert
                       </button>
                       <button
                         onClick={handleDownload}
-                        className="w-[30%] px-6 py-3 bg-[#E46356] text-white rounded-lg transition font-medium flex items-center justify-center gap-2 shadow-lg"
+                        className="flex-1 px-6 py-3 bg-gradient-to-r from-[#E46356] to-[#B978B2] text-white rounded-xl hover:from-[#D8554A] hover:to-[#A869A0] transition-all duration-200 font-semibold flex items-center justify-center gap-2 shadow-lg hover:shadow-xl manrope-medium"
                       >
                         <Download className="w-5 h-5" />
                         Download
@@ -1908,20 +1977,20 @@ const Dashboard: React.FC = () => {
 
         {/* Success Page (used for batch zip if no packaged zip returned) */}
         {currentPage === "success" && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 sm:p-12">
+          <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-12 sm:p-16">
             <div className="text-center max-w-md mx-auto">
-              <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                <CheckCircle className="w-12 h-12 text-green-600" />
+              <div className="w-24 h-24 bg-gradient-to-br from-green-100 to-emerald-100 rounded-full flex items-center justify-center mx-auto mb-8 shadow-lg">
+                <CheckCircle className="w-14 h-14 text-green-600" />
               </div>
-              <h3 className="text-3xl font-bold text-gray-900 mb-3">
+              <h3 className="text-3xl font-bold text-gray-900 mb-4 manrope-bold">
                 Completed!
               </h3>
-              <p className="text-gray-600 mb-8">
+              <p className="text-lg text-gray-600 mb-10 manrope-regular">
                 Your request has been processed successfully.
               </p>
               <button
                 onClick={handleReset}
-                className="px-8 py-4 bg-[#E46356] rounded-2xl text-white transition font-semibold flex items-center justify-center gap-2 mx-auto shadow-lg"
+                className="px-8 py-4 bg-gradient-to-r from-[#E46356] to-[#B978B2] rounded-xl text-white transition-all duration-200 font-semibold flex items-center justify-center gap-2 mx-auto shadow-lg hover:shadow-xl hover:from-[#D8554A] hover:to-[#A869A0] transform hover:scale-105 manrope-medium"
               >
                 <RefreshCw className="w-5 h-5" />
                 Convert Another
@@ -1932,18 +2001,20 @@ const Dashboard: React.FC = () => {
 
         {/* Error Page */}
         {currentPage === "error" && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 sm:p-12">
+          <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-12 sm:p-16">
             <div className="text-center max-w-md mx-auto">
-              <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                <AlertCircle className="w-12 h-12 text-red-600" />
+              <div className="w-24 h-24 bg-gradient-to-br from-red-100 to-orange-100 rounded-full flex items-center justify-center mx-auto mb-8 shadow-lg">
+                <AlertCircle className="w-14 h-14 text-red-600" />
               </div>
-              <h3 className="text-3xl font-bold text-gray-900 mb-3">
+              <h3 className="text-3xl font-bold text-gray-900 mb-4 manrope-bold">
                 Something Went Wrong
               </h3>
-              <p className="text-gray-600 mb-8">{errorMessage}</p>
+              <p className="text-lg text-gray-600 mb-10 manrope-regular bg-red-50 border border-red-100 rounded-lg p-4">
+                {errorMessage}
+              </p>
               <button
                 onClick={handleReset}
-                className="px-8 py-4 bg-[#E46356] rounded-2xl text-white transition font-semibold flex items-center justify-center gap-2 mx-auto shadow-lg"
+                className="px-8 py-4 bg-gradient-to-r from-[#E46356] to-[#B978B2] rounded-xl text-white transition-all duration-200 font-semibold flex items-center justify-center gap-2 mx-auto shadow-lg hover:shadow-xl hover:from-[#D8554A] hover:to-[#A869A0] transform hover:scale-105 manrope-medium"
               >
                 <RefreshCw className="w-5 h-5" />
                 Try Again
