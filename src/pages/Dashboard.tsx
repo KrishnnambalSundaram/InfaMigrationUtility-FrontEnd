@@ -181,6 +181,50 @@ const Dashboard: React.FC = () => {
     setCustomFileName("");
   }, [selectedTab]);
 
+  // Reset UI to default state when input mode changes
+  useEffect(() => {
+    // Reset to upload page
+    setCurrentPage("upload");
+
+    // Clear file upload state
+    setSelectedFile(null);
+    setUploadedFile(null);
+    setFileStats(null);
+    setConvertedFile(null);
+
+    // Clear progress and overlay state
+    setProgress(0);
+    setCurrentStepText("");
+    setFilesConvertedCount(0);
+    setTotalFilesCount(0);
+    setElapsedMs(null);
+    setEtaMs(null);
+    setShowZipOverlay(false);
+    setIsProcessing(false);
+
+    // Clear error and preview state
+    setErrorMessage("");
+    setShowPreview(false);
+    setExpandedIndex(null);
+    finalizedRef.current = false;
+
+    // Disconnect any active WebSocket connections
+    if (activeJobIdRef.current) {
+      disconnectSocket(activeJobIdRef.current);
+      activeJobIdRef.current = null;
+    } else {
+      disconnectSocket();
+    }
+
+    // Clear single editors
+    setSingleSourceCode("");
+    setSingleResult("");
+    setSingleOutputs([]);
+    setIsConvertingSingle(false);
+    // Clear custom file name
+    setCustomFileName("");
+  }, [inputMode]);
+
   const { logout } = useAuth();
   const handleLogout = () => {
     logout();
@@ -233,17 +277,44 @@ const Dashboard: React.FC = () => {
         totalFiles += 1;
         if (!zipEntry.dir) {
           const isSql =
-            filename.endsWith(".sql") || filename.endsWith(".plsql");
+            filename.endsWith(".sql") ||
+            filename.endsWith(".plsql") ||
+            filename.endsWith(".pls") ||
+            filename.endsWith(".pkg") ||
+            filename.endsWith(".prc") ||
+            filename.endsWith(".fnc");
           const isShOrBat =
-            filename.endsWith(".sh") || filename.endsWith(".bat");
+            filename.endsWith(".sh") ||
+            filename.endsWith(".bat") ||
+            filename.endsWith(".ksh") ||
+            filename.endsWith(".bash") ||
+            filename.endsWith(".zsh") ||
+            filename.endsWith(".cmd") ||
+            filename.endsWith(".ps1");
           const isIdmcSummary =
             filename.endsWith(".md") ||
             filename.endsWith(".txt") ||
             filename.endsWith(".bin") ||
             filename.endsWith(".doc") ||
+            filename.endsWith(".docx") ||
+            filename.endsWith(".json") ||
             filename.toLowerCase().includes("idmc") ||
             filename.toLowerCase().includes("summary");
-          if (isSql || isShOrBat || (isIdmcToJsonTab && isIdmcSummary)) {
+
+          // Filter files based on conversion type
+          let shouldInclude = false;
+          if (isIdmcToJsonTab && isIdmcSummary) {
+            shouldInclude = true;
+          } else if (
+            (selectedTab === "idmc-batch" || selectedTab === "batch-human") &&
+            isShOrBat
+          ) {
+            shouldInclude = true;
+          } else if ((isIdmcTab || isSnowflakeTab) && isSql) {
+            shouldInclude = true;
+          }
+
+          if (shouldInclude) {
             const content = await zipEntry.async("string");
             const size = content.length;
             const lines = countLines(content);
@@ -281,50 +352,153 @@ const Dashboard: React.FC = () => {
     }
   }, []);
 
-  const handleDrop = useCallback(async (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragActive(false);
+  const handleDrop = useCallback(
+    async (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setDragActive(false);
 
-    const files = e.dataTransfer.files;
-    if (files && files[0]) {
-      const file = files[0];
-      // Support both ZIP files and single files
-      const response = await fileUpload(file);
-      if (response?.success) {
-        setUploadedFile(response.file);
-        setSelectedFile(file);
-        // Only analyze ZIP files
-        if (file.name.endsWith(".zip")) {
-          analyzeZipFile(file);
-        } else {
-          // For single files, create minimal file stats
-          const fileContent = await file.text();
-          setFileStats({
-            totalFilesinFile: 1,
-            totalFiles: 1,
-            totalSize: file.size,
-            totalLines: countLines(fileContent),
-            files: [
-              {
-                name: file.name,
-                size: file.size,
-                lines: countLines(fileContent),
-              },
-            ],
-          });
+      const files = e.dataTransfer.files;
+      if (files && files[0]) {
+        const file = files[0];
+
+        // Validate file type based on conversion type
+        const fileName = file.name.toLowerCase();
+        const isZip = fileName.endsWith(".zip");
+        let isValidFile = isZip;
+
+        if (!isZip) {
+          if (isIdmcToJsonTab) {
+            isValidFile =
+              fileName.endsWith(".txt") ||
+              fileName.endsWith(".bin") ||
+              fileName.endsWith(".md") ||
+              fileName.endsWith(".doc") ||
+              fileName.endsWith(".docx") ||
+              fileName.endsWith(".json");
+          } else if (
+            selectedTab === "idmc-batch" ||
+            selectedTab === "batch-human"
+          ) {
+            isValidFile =
+              fileName.endsWith(".sh") ||
+              fileName.endsWith(".bat") ||
+              fileName.endsWith(".ksh") ||
+              fileName.endsWith(".bash") ||
+              fileName.endsWith(".zsh") ||
+              fileName.endsWith(".cmd") ||
+              fileName.endsWith(".ps1");
+          } else if (isIdmcTab || isSnowflakeTab) {
+            isValidFile =
+              fileName.endsWith(".sql") ||
+              fileName.endsWith(".plsql") ||
+              fileName.endsWith(".pls") ||
+              fileName.endsWith(".pkg") ||
+              fileName.endsWith(".prc") ||
+              fileName.endsWith(".fnc");
+          }
         }
-      } else {
-        setErrorMessage("Please upload the file again!!");
-        setCurrentPage("error");
+
+        if (!isValidFile) {
+          setErrorMessage(
+            isIdmcToJsonTab
+              ? "Please upload a ZIP file or a valid IDMC Summary file (.txt, .bin, .md, .doc, .docx, .json)"
+              : selectedTab === "idmc-batch" || selectedTab === "batch-human"
+              ? "Please upload a ZIP file or a valid batch script (.sh, .bat, .ksh, .bash, .zsh, .cmd, .ps1)"
+              : "Please upload a ZIP file or a valid SQL file (.sql, .plsql, etc.)"
+          );
+          setCurrentPage("error");
+          return;
+        }
+
+        // Support both ZIP files and single files
+        const response = await fileUpload(file);
+        if (response?.success) {
+          setUploadedFile(response.file);
+          setSelectedFile(file);
+          // Only analyze ZIP files
+          if (file.name.endsWith(".zip")) {
+            analyzeZipFile(file);
+          } else {
+            // For single files, create minimal file stats
+            const fileContent = await file.text();
+            setFileStats({
+              totalFilesinFile: 1,
+              totalFiles: 1,
+              totalSize: file.size,
+              totalLines: countLines(fileContent),
+              files: [
+                {
+                  name: file.name,
+                  size: file.size,
+                  lines: countLines(fileContent),
+                },
+              ],
+            });
+          }
+        } else {
+          setErrorMessage("Please upload the file again!!");
+          setCurrentPage("error");
+        }
       }
-    }
-  }, []);
+    },
+    [selectedTab, isIdmcTab, isSnowflakeTab, isIdmcToJsonTab]
+  );
 
   const handleFileInput = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files[0]) {
       const file = files[0];
+
+      // Validate file type based on conversion type
+      const fileName = file.name.toLowerCase();
+      const isZip = fileName.endsWith(".zip");
+      let isValidFile = isZip;
+
+      if (!isZip) {
+        if (isIdmcToJsonTab) {
+          isValidFile =
+            fileName.endsWith(".txt") ||
+            fileName.endsWith(".bin") ||
+            fileName.endsWith(".md") ||
+            fileName.endsWith(".doc") ||
+            fileName.endsWith(".docx") ||
+            fileName.endsWith(".json");
+        } else if (
+          selectedTab === "idmc-batch" ||
+          selectedTab === "batch-human"
+        ) {
+          isValidFile =
+            fileName.endsWith(".sh") ||
+            fileName.endsWith(".bat") ||
+            fileName.endsWith(".ksh") ||
+            fileName.endsWith(".bash") ||
+            fileName.endsWith(".zsh") ||
+            fileName.endsWith(".cmd") ||
+            fileName.endsWith(".ps1");
+        } else if (isIdmcTab || isSnowflakeTab) {
+          isValidFile =
+            fileName.endsWith(".sql") ||
+            fileName.endsWith(".plsql") ||
+            fileName.endsWith(".pls") ||
+            fileName.endsWith(".pkg") ||
+            fileName.endsWith(".prc") ||
+            fileName.endsWith(".fnc");
+        }
+      }
+
+      if (!isValidFile) {
+        setErrorMessage(
+          isIdmcToJsonTab
+            ? "Please upload a ZIP file or a valid IDMC Summary file (.txt, .bin, .md, .doc, .docx, .json)"
+            : selectedTab === "idmc-batch" || selectedTab === "batch-human"
+            ? "Please upload a ZIP file or a valid batch script (.sh, .bat, .ksh, .bash, .zsh, .cmd, .ps1)"
+            : "Please upload a ZIP file or a valid SQL file (.sql, .plsql, etc.)"
+        );
+        setCurrentPage("error");
+        return;
+      }
+
       // Support both ZIP files and single files
       const response = await fileUpload(file);
       if (response?.success) {
@@ -362,11 +536,180 @@ const Dashboard: React.FC = () => {
     if (!selectedFile || !uploadedFile?.path) return;
 
     try {
+      finalizedRef.current = false; // Reset finalized flag
       setProgress(1); // show overlay immediately
       setShowZipOverlay(true);
       setErrorMessage("");
 
-      // Connect socket immediately and register listener BEFORE starting the API call
+      const target = isSnowflakeTab ? "snowflake" : isIdmcTab ? "idmc" : "idmc";
+      const payload: any = {
+        inputType: "zip",
+        target,
+        sourceType: "auto",
+        zipFilePath: uploadedFile.path,
+      };
+      if (target === "idmc") {
+        payload.outputFormat = outputFormat;
+      }
+      if (customFileName && customFileName.trim()) {
+        payload.customFileName = customFileName.trim();
+      }
+
+      // Start unified conversion to get jobId and zipFilename
+      const response = (await convertUnified(payload)) as UnifiedResponse;
+      console.log("[convertUnified] response:", response);
+
+      // Check if this is a single-file response (when single file uploaded instead of ZIP)
+      const isSingleFileResponse =
+        "outputFiles" in response && !("zipFilename" in response);
+
+      let jobId: string | undefined = undefined;
+      if ("jobId" in response) {
+        jobId = (response as any).jobId as string;
+        activeJobIdRef.current = jobId;
+      } else if (isSingleFileResponse) {
+        // Single file response might not have jobId, but could still be async
+        jobId = (response as any).jobId;
+        if (jobId) {
+          activeJobIdRef.current = jobId;
+        }
+      } else {
+        throw new Error("Unexpected response for ZIP conversion");
+      }
+
+      // Define finalizeSuccess BEFORE using it in socket handler
+      const finalizeSuccess = (data: any) => {
+        if (finalizedRef.current) return;
+        finalizedRef.current = true;
+
+        // Handle single-file response structure
+        if (isSingleFileResponse || (data?.outputFiles && !data?.zipFilename)) {
+          // Single file response - convert to result page format
+          const singleResponse = data?.result || data || response;
+          const outputFiles = singleResponse?.outputFiles || [];
+
+          // Get original content from response if available
+          const originalContent = singleResponse?.originalContent || "";
+
+          // Create a converted file structure for single file
+          const mappedConverted = outputFiles.map((f: any) => ({
+            original:
+              singleResponse?.fileName ||
+              uploadedFile?.name ||
+              selectedFile?.name ||
+              "input.sql",
+            converted: f.name || "output.json",
+            oracleContent: originalContent,
+            snowflakeContent:
+              singleResponse?.jsonContent ||
+              singleResponse?.convertedContent ||
+              "",
+            targetFolder: f.path || "", // Store file path for downloads
+          }));
+
+          // Determine if this is a ZIP file or single file for download
+          const firstOutputFile = outputFiles[0];
+          const isZipFile = firstOutputFile?.name?.endsWith(".zip") || false;
+          const downloadIdentifier = isZipFile
+            ? firstOutputFile?.name || "output.zip"
+            : firstOutputFile?.path || firstOutputFile?.name || "output.zip";
+
+          setConvertedFile({
+            success: true,
+            message: "completed",
+            source: target,
+            jobId: jobId || "single_file",
+            analysis: {
+              totalFiles: 1,
+              oracleFiles: 0,
+              solutionName: "",
+              linesOfCode: fileStats?.totalLines || 0,
+              fileSize: formatBytes(
+                fileStats?.totalSize || uploadedFile?.size || 0
+              ),
+              namespaces: [],
+              classes: 0,
+              dependencies: [],
+            },
+            conversion: {
+              totalConverted: 1,
+              totalFiles: 1,
+              successRate: 100,
+              convertedFiles: mappedConverted,
+            },
+            zipFilename: downloadIdentifier, // Store path for single files, filename for ZIPs
+          });
+        } else {
+          // ZIP response structure - use standardized API response structure
+          const responseData = data?.result || data || response;
+          const zipName =
+            responseData?.zipFilename || (response as any).zipFilename;
+
+          // Get results array directly from standardized response
+          const rawResults =
+            responseData?.results ||
+            data?.result?.results ||
+            (response as any)?.results ||
+            [];
+
+          // Map standardized results array to convertedFiles format
+          const mappedConverted = rawResults.map((f: any) => ({
+            original: f.fileName || f.original || f.name || "",
+            converted: f.fileName
+              ? isSnowflakeTab
+                ? `${f.fileName.replace(/\.(sql|plsql)$/i, "")}.sql`
+                : `${f.fileName.replace(/\.(sql|plsql)$/i, "")}.${
+                    outputFormat === "docx" ? "docx" : "json"
+                  }`
+              : f.converted || f.name || "",
+            oracleContent: f.originalContent || "",
+            snowflakeContent: f.convertedContent || "",
+            targetFolder: f.targetFolder || "",
+          }));
+
+          setConvertedFile({
+            success: true,
+            message: "completed",
+            source: target,
+            jobId: jobId || "zip_conversion",
+            analysis: {
+              totalFiles:
+                data?.result?.analysis?.totalFiles ||
+                fileStats?.totalFiles ||
+                0,
+              oracleFiles: 0,
+              solutionName: "",
+              linesOfCode: data?.result?.analysis?.linesOfCode || 0,
+              fileSize: data?.result?.analysis?.fileSize || "",
+              namespaces: [],
+              classes: 0,
+              dependencies: [],
+            },
+            conversion: {
+              totalConverted:
+                responseData?.processing?.processedFiles ||
+                mappedConverted.length,
+              totalFiles:
+                responseData?.processing?.totalFiles ||
+                fileStats?.totalFiles ||
+                mappedConverted.length,
+              successRate: responseData?.processing?.successRate || 0,
+              convertedFiles: mappedConverted,
+            },
+            zipFilename: zipName,
+          });
+        }
+
+        setProgress(100);
+        setShowZipOverlay(false);
+        setCurrentPage("result");
+        if (jobId) {
+          disconnectSocket(jobId);
+        }
+        activeJobIdRef.current = null;
+      };
+
+      // Connect socket immediately and register listener AFTER defining finalizeSuccess
       const socket = connectSocket();
       // Ensure no duplicate handlers from previous runs
       socket.off("progress-update");
@@ -407,8 +750,23 @@ const Dashboard: React.FC = () => {
         const completedByProgress =
           typeof data?.progress === "number" && data.progress >= 100;
         const hasZip = !!data?.result?.zipFilename || !!data?.zipFilename;
-        if (completedStatus || completedByProgress || hasZip) {
-          finalizeSuccess(data);
+        const hasResults = !!data?.result?.results || !!data?.results;
+        const hasSingleFileResult =
+          !!data?.result?.outputFiles ||
+          !!data?.outputFiles ||
+          !!data?.result?.jsonContent ||
+          !!data?.jsonContent;
+
+        if (
+          completedStatus ||
+          completedByProgress ||
+          (hasZip && hasResults) ||
+          hasSingleFileResult
+        ) {
+          // Small delay to ensure progress shows 100% before closing
+          setTimeout(() => {
+            finalizeSuccess(data);
+          }, 300);
         } else if (data?.status === "failed") {
           setErrorMessage(data.error || "Conversion failed");
           setShowZipOverlay(false);
@@ -420,96 +778,6 @@ const Dashboard: React.FC = () => {
         }
       });
 
-      const target = isSnowflakeTab ? "snowflake" : isIdmcTab ? "idmc" : "idmc";
-      const payload: any = {
-        inputType: "zip",
-        target,
-        sourceType: "auto",
-        zipFilePath: uploadedFile.path,
-      };
-      if (target === "idmc") {
-        payload.outputFormat = outputFormat;
-      }
-      if (customFileName && customFileName.trim()) {
-        payload.customFileName = customFileName.trim();
-      }
-
-      // Start unified conversion to get jobId and zipFilename
-      const response = (await convertUnified(payload)) as UnifiedResponse;
-      console.log("[convertUnified] response:", response);
-      if (!("jobId" in response)) {
-        throw new Error("Unexpected response for ZIP conversion");
-      }
-      const jobId = (response as any).jobId as string;
-      activeJobIdRef.current = jobId;
-
-      const finalizeSuccess = (data: any) => {
-        if (finalizedRef.current) return;
-        finalizedRef.current = true;
-
-        // Use standardized API response structure - results array is at top level
-        const responseData = data?.result || data || response;
-        const zipName =
-          responseData?.zipFilename || (response as any).zipFilename;
-
-        // Get results array directly from standardized response
-        const rawResults =
-          responseData?.results ||
-          data?.result?.results ||
-          (response as any)?.results ||
-          [];
-
-        // Map standardized results array to convertedFiles format
-        const mappedConverted = rawResults.map((f: any) => ({
-          original: f.fileName || f.original || f.name || "",
-          converted: f.fileName
-            ? isSnowflakeTab
-              ? `${f.fileName.replace(/\.(sql|plsql)$/i, "")}.sql`
-              : `${f.fileName.replace(/\.(sql|plsql)$/i, "")}.${
-                  outputFormat === "docx" ? "docx" : "json"
-                }`
-            : f.converted || f.name || "",
-          oracleContent: f.originalContent || "",
-          snowflakeContent: f.convertedContent || "",
-          targetFolder: f.targetFolder || "",
-        }));
-
-        setConvertedFile({
-          success: true,
-          message: "completed",
-          source: target,
-          jobId,
-          analysis: {
-            totalFiles:
-              data?.result?.analysis?.totalFiles || fileStats?.totalFiles || 0,
-            oracleFiles: 0,
-            solutionName: "",
-            linesOfCode: data?.result?.analysis?.linesOfCode || 0,
-            fileSize: data?.result?.analysis?.fileSize || "",
-            namespaces: [],
-            classes: 0,
-            dependencies: [],
-          },
-          conversion: {
-            totalConverted:
-              responseData?.processing?.processedFiles ||
-              mappedConverted.length,
-            totalFiles:
-              responseData?.processing?.totalFiles ||
-              fileStats?.totalFiles ||
-              mappedConverted.length,
-            successRate: responseData?.processing?.successRate || 0,
-            convertedFiles: mappedConverted,
-          },
-          zipFilename: zipName,
-        });
-        setProgress(100);
-        setShowZipOverlay(false);
-        setCurrentPage("result");
-        disconnectSocket(jobId);
-        activeJobIdRef.current = null;
-      };
-
       // already registered handler above
 
       // Optional system notifications
@@ -520,21 +788,36 @@ const Dashboard: React.FC = () => {
         } catch (_) {}
       });
 
-      // If API already returned a packaged zip without emitting progress, finalize immediately
-      if (
+      // If API already returned a complete response without emitting progress, finalize immediately
+      if (isSingleFileResponse) {
+        // Single file response - finalize immediately
+        console.log(
+          "[convertUnified] immediate finalize with single file:",
+          (response as UnifiedSingleResponse).fileName
+        );
+        setProgress(100);
+        setTimeout(() => {
+          finalizeSuccess(response);
+        }, 500);
+      } else if (
         (response as any)?.zipFilename &&
-        !(response as any)?.conversion?.pending
+        !(response as any)?.conversion?.pending &&
+        ((response as any)?.results || (response as any)?.zipFilePath)
       ) {
+        // ZIP response - finalize immediately
         console.log(
           "[convertUnified] immediate finalize with zip:",
           (response as any).zipFilename
         );
-        finalizeSuccess({
-          zipFilename: (response as any).zipFilename,
-          zipFilePath: (response as any).zipFilePath,
-          results: (response as any).results || [],
-          processing: (response as any).processing,
-        });
+        setProgress(100);
+        setTimeout(() => {
+          finalizeSuccess({
+            zipFilename: (response as any).zipFilename,
+            zipFilePath: (response as any).zipFilePath,
+            results: (response as any).results || [],
+            processing: (response as any).processing,
+          });
+        }, 500);
       }
     } catch (error) {
       console.error("Conversion error:", error);
@@ -611,8 +894,22 @@ const Dashboard: React.FC = () => {
           !!data?.result?.zipFilename ||
           !!data?.zipFilename ||
           !!apiResponse?.zipFilename;
+        const hasResults =
+          !!data?.result?.results || !!data?.results || !!apiResponse?.results;
+        const hasSingleFileResult =
+          !!data?.result?.outputFiles ||
+          !!data?.outputFiles ||
+          !!data?.result?.fileName ||
+          !!data?.fileName ||
+          !!apiResponse?.outputFiles ||
+          !!apiResponse?.fileName;
 
-        if (completedStatus || completedByProgress || hasZip) {
+        if (
+          completedStatus ||
+          completedByProgress ||
+          (hasZip && hasResults) ||
+          hasSingleFileResult
+        ) {
           // Finalize with WebSocket data or API response
           // WebSocket may wrap result in data.result with structure: { zipFilename, results, processing }
           // Or pass it directly in data
@@ -621,15 +918,26 @@ const Dashboard: React.FC = () => {
 
           if (
             data?.result &&
-            (data.result.results || data.result.zipFilename)
+            (data.result.results ||
+              data.result.zipFilename ||
+              data.result.outputFiles ||
+              data.result.fileName)
           ) {
             // WebSocket wrapped the response in data.result
             finalData = data.result;
-          } else if (data?.results || data?.zipFilename) {
+          } else if (
+            data?.results ||
+            data?.zipFilename ||
+            data?.outputFiles ||
+            data?.fileName
+          ) {
             // WebSocket passed response directly in data
             finalData = data;
           } else if (apiResponse?.results && apiResponse?.zipFilename) {
             // Use API response as fallback
+            finalData = apiResponse;
+          } else if (apiResponse?.outputFiles || apiResponse?.fileName) {
+            // Single-file response from API
             finalData = apiResponse;
           }
 
@@ -642,7 +950,9 @@ const Dashboard: React.FC = () => {
             }
             activeJobIdRef.current = null;
 
-            finalizeBatchIdmc(finalData);
+            setTimeout(() => {
+              finalizeBatchIdmc(finalData);
+            }, 300);
           }
         } else if (data?.status === "failed") {
           setErrorMessage(data.error || "Batch processing failed");
@@ -687,12 +997,16 @@ const Dashboard: React.FC = () => {
         activeJobIdRef.current = jobId;
       }
 
+      // Check if this is a single-file response
+      const isSingleFileResponse =
+        (apiResponse as any)?.outputFiles && !(apiResponse as any)?.zipFilename;
+
       // If API already returned complete response, finalize immediately and disconnect socket
       if (
         apiResponse?.success &&
-        apiResponse?.results &&
-        apiResponse?.zipFilename &&
-        !finalizedRef.current
+        !finalizedRef.current &&
+        ((isSingleFileResponse && (apiResponse as any)?.outputFiles) ||
+          (apiResponse?.results && apiResponse?.zipFilename))
       ) {
         // Disconnect socket immediately since we have complete response
         socket.off("progress-update");
@@ -725,86 +1039,151 @@ const Dashboard: React.FC = () => {
     if (finalizedRef.current) return;
     finalizedRef.current = true;
 
-    // Extract data directly from API response
-    // API response structure: { success, zipFilename, zipFilePath, results: [{ fileName, originalContent, convertedContent }], processing }
-    const zipFilename =
-      response.zipFilename ||
-      (response.zipFilePath
-        ? response.zipFilePath.split("/").pop()
-        : undefined);
+    // Check if this is a single-file response
+    const isSingleFileResponse =
+      (response?.outputFiles && !response?.zipFilename) ||
+      (response?.fileName && !response?.zipFilename);
 
-    // Results array is at top level of response
-    const results = response.results || [];
-    const processing = response.processing || {
-      totalFiles: 0,
-      processedFiles: 0,
-      failedFiles: 0,
-      successRate: 0,
-    };
+    if (isSingleFileResponse) {
+      // Handle single-file response structure
+      const outputFiles = response?.outputFiles || [];
+      const originalContent = response?.originalContent || "";
+      const convertedContent = response?.convertedContent || "";
+      const fileName =
+        response?.fileName ||
+        uploadedFile?.name ||
+        selectedFile?.name ||
+        "input.txt";
 
-    // Map results array to convertedFiles format
-    // Each result has: fileName, originalContent, convertedContent
-    const mappedConvertedFiles = results
-      .filter((result: any) => result && result.fileName)
-      .map((result: any) => {
-        // Extract content directly from API response - these fields are mandatory per API docs
-        const originalContent = String(result.originalContent || "");
-        const convertedContent = String(result.convertedContent || "");
-        const fileName = String(result.fileName || "");
-
-        return {
-          original: fileName,
-          converted: `${fileName.replace(/\.(bat|sh|ksh|py)$/i, "")}.${
+      // Create a converted file structure for single file
+      const mappedConverted = outputFiles.map((f: any) => ({
+        original: fileName,
+        converted:
+          f.name ||
+          `${fileName.replace(/\.(bat|sh|ksh|bash|zsh|cmd|ps1|py)$/i, "")}.${
             batchOutputFormat === "doc" ? "docx" : "txt"
           }`,
-          oracleContent: originalContent, // This will be shown in preview as "Original"
-          snowflakeContent: convertedContent, // This will be shown in preview as "Converted"
-          targetFolder: result.targetFolder || "",
-        };
+        oracleContent: originalContent,
+        snowflakeContent: convertedContent,
+        targetFolder: f.path || "",
+      }));
+
+      // Determine if this is a ZIP file or single file for download
+      const firstOutputFile = outputFiles[0];
+      const isZipFile = firstOutputFile?.name?.endsWith(".zip") || false;
+      const downloadIdentifier = isZipFile
+        ? firstOutputFile?.name || "output.zip"
+        : firstOutputFile?.path || firstOutputFile?.name || "output.txt";
+
+      setConvertedFile({
+        success: true,
+        message: response.message || "completed",
+        source: response.source || "idmc",
+        jobId: response.jobId || "batch_single",
+        analysis: {
+          totalFiles: 1,
+          oracleFiles: 0,
+          solutionName: "",
+          linesOfCode: fileStats?.totalLines || 0,
+          fileSize: formatBytes(
+            fileStats?.totalSize || uploadedFile?.size || 0
+          ),
+          namespaces: [],
+          classes: 0,
+          dependencies: [],
+        },
+        conversion: {
+          totalConverted: 1,
+          totalFiles: 1,
+          successRate: 100,
+          convertedFiles: mappedConverted,
+        },
+        zipFilename: downloadIdentifier,
       });
+    } else {
+      // Handle ZIP response structure
+      // Extract data directly from API response
+      // API response structure: { success, zipFilename, zipFilePath, results: [{ fileName, originalContent, convertedContent }], processing }
+      const zipFilename =
+        response.zipFilename ||
+        (response.zipFilePath
+          ? response.zipFilePath.split("/").pop()
+          : undefined);
 
-    // Verify we have required data before setting state
-    if (!zipFilename) {
-      console.error(
-        "[finalizeBatchIdmc] Missing zipFilename in response:",
-        response
-      );
-    }
-    if (mappedConvertedFiles.length === 0) {
-      console.warn(
-        "[finalizeBatchIdmc] No converted files mapped from results:",
-        results
-      );
-    }
+      // Results array is at top level of response
+      const results = response.results || [];
+      const processing = response.processing || {
+        totalFiles: 0,
+        processedFiles: 0,
+        failedFiles: 0,
+        successRate: 0,
+      };
 
-    // Set converted file state
-    setConvertedFile({
-      success: true,
-      message: response.message || "completed",
-      source: response.source || "idmc",
-      jobId: response.jobId || "batch_zip",
-      analysis: {
-        totalFiles: processing.totalFiles || fileStats?.totalFiles || 0,
-        oracleFiles: 0,
-        solutionName: "",
-        linesOfCode: fileStats?.totalLines || 0,
-        fileSize: formatBytes(fileStats?.totalSize || 0),
-        namespaces: [],
-        classes: 0,
-        dependencies: [],
-      },
-      conversion: {
-        totalConverted:
-          processing.processedFiles ||
-          mappedConvertedFiles.length ||
-          fileStats?.totalFiles ||
-          0,
-        totalFiles: processing.totalFiles || fileStats?.totalFiles || 0,
-        successRate: processing.successRate || 100,
-        convertedFiles: mappedConvertedFiles,
-      },
-      zipFilename: zipFilename || "batch_output.zip",
-    });
+      // Map results array to convertedFiles format
+      // Each result has: fileName, originalContent, convertedContent
+      const mappedConvertedFiles = results
+        .filter((result: any) => result && result.fileName)
+        .map((result: any) => {
+          // Extract content directly from API response - these fields are mandatory per API docs
+          const originalContent = String(result.originalContent || "");
+          const convertedContent = String(result.convertedContent || "");
+          const fileName = String(result.fileName || "");
+
+          return {
+            original: fileName,
+            converted: `${fileName.replace(
+              /\.(bat|sh|ksh|bash|zsh|cmd|ps1|py)$/i,
+              ""
+            )}.${batchOutputFormat === "doc" ? "docx" : "txt"}`,
+            oracleContent: originalContent, // This will be shown in preview as "Original"
+            snowflakeContent: convertedContent, // This will be shown in preview as "Converted"
+            targetFolder: result.targetFolder || "",
+          };
+        });
+
+      // Verify we have required data before setting state
+      if (!zipFilename) {
+        console.error(
+          "[finalizeBatchIdmc] Missing zipFilename in response:",
+          response
+        );
+      }
+      if (mappedConvertedFiles.length === 0) {
+        console.warn(
+          "[finalizeBatchIdmc] No converted files mapped from results:",
+          results
+        );
+      }
+
+      // Set converted file state
+      setConvertedFile({
+        success: true,
+        message: response.message || "completed",
+        source: response.source || "idmc",
+        jobId: response.jobId || "batch_zip",
+        analysis: {
+          totalFiles: processing.totalFiles || fileStats?.totalFiles || 0,
+          oracleFiles: 0,
+          solutionName: "",
+          linesOfCode: fileStats?.totalLines || 0,
+          fileSize: formatBytes(fileStats?.totalSize || 0),
+          namespaces: [],
+          classes: 0,
+          dependencies: [],
+        },
+        conversion: {
+          totalConverted:
+            processing.processedFiles ||
+            mappedConvertedFiles.length ||
+            fileStats?.totalFiles ||
+            0,
+          totalFiles: processing.totalFiles || fileStats?.totalFiles || 0,
+          successRate: processing.successRate || 100,
+          convertedFiles: mappedConvertedFiles,
+        },
+        zipFilename: zipFilename || "batch_output.zip",
+      });
+    }
 
     setProgress(100);
     setShowZipOverlay(false);
@@ -850,68 +1229,135 @@ const Dashboard: React.FC = () => {
         // Use the data parameter directly if it exists, otherwise use resp closure
         const responseData = data || resp;
 
-        // Extract zipFilename - API response has it at top level
-        const zipName =
-          responseData?.zipFilename ||
-          (responseData?.zipFilePath
-            ? responseData.zipFilePath.split("/").pop()
-            : undefined) ||
-          "human_output.zip";
+        // Check if this is a single-file response
+        const isSingleFileResponse =
+          (responseData?.outputFiles && !responseData?.zipFilename) ||
+          (responseData?.fileName && !responseData?.zipFilename);
 
-        // Extract results array - API response has results at top level
-        // responseData = data || resp, so responseData.results works for both API and WebSocket
-        const results = (responseData?.results || // Direct from responseData (works for both cases)
-          data?.result?.results || // WebSocket wrapped structure (if data has result wrapper)
-          []) as any[]; // Empty if not found
+        if (isSingleFileResponse) {
+          // Handle single-file response structure
+          const outputFiles = responseData?.outputFiles || [];
+          const originalContent = responseData?.originalContent || "";
+          const convertedContent = responseData?.convertedContent || "";
+          const fileName =
+            responseData?.fileName ||
+            uploadedFile?.name ||
+            selectedFile?.name ||
+            "input.txt";
 
-        // Map standardized results array to convertedFiles format
-        const mappedConvertedFiles = results
-          .filter((result: any) => result != null && result.fileName)
-          .map((result: any) => {
-            // Use standardized fields from API response
-            const originalContent = result.originalContent || "";
-            const convertedContent = result.convertedContent || "";
-            const fileName = result.fileName;
+          // Create a converted file structure for single file
+          const mappedConverted = outputFiles.map((f: any) => ({
+            original: fileName,
+            converted:
+              f.name ||
+              `${fileName.replace(
+                /\.(bat|sh|ksh|bash|zsh|cmd|ps1|py)$/i,
+                ""
+              )}.${batchOutputFormat === "doc" ? "docx" : "txt"}`,
+            oracleContent: originalContent,
+            snowflakeContent: convertedContent,
+            targetFolder: f.path || "",
+          }));
 
-            return {
-              original: fileName,
-              converted: `${fileName.replace(/\.(bat|sh|ksh|py)$/i, "")}.${
-                batchOutputFormat === "doc" ? "docx" : "txt"
-              }`,
-              oracleContent: originalContent,
-              snowflakeContent: convertedContent,
-              targetFolder: result.targetFolder || "",
-            };
+          // Determine if this is a ZIP file or single file for download
+          const firstOutputFile = outputFiles[0];
+          const isZipFile = firstOutputFile?.name?.endsWith(".zip") || false;
+          const downloadIdentifier = isZipFile
+            ? firstOutputFile?.name || "output.zip"
+            : firstOutputFile?.path || firstOutputFile?.name || "output.txt";
+
+          setConvertedFile({
+            success: true,
+            message: responseData?.message || "completed",
+            source: responseData?.source || "human",
+            jobId: jobId || "batch_human_single",
+            analysis: {
+              totalFiles: 1,
+              oracleFiles: 0,
+              solutionName: "",
+              linesOfCode: fileStats.totalLines,
+              fileSize: formatBytes(
+                fileStats.totalSize || uploadedFile?.size || 0
+              ),
+              namespaces: [],
+              classes: 0,
+              dependencies: [],
+            },
+            conversion: {
+              totalConverted: 1,
+              totalFiles: 1,
+              successRate: 100,
+              convertedFiles: mappedConverted,
+            },
+            zipFilename: downloadIdentifier,
           });
+        } else {
+          // Handle ZIP response structure
+          // Extract zipFilename - API response has it at top level
+          const zipName =
+            responseData?.zipFilename ||
+            (responseData?.zipFilePath
+              ? responseData.zipFilePath.split("/").pop()
+              : undefined) ||
+            "human_output.zip";
 
-        setConvertedFile({
-          success: true,
-          message: responseData?.message || "completed",
-          source: responseData?.source || "human",
-          jobId: jobId || "batch_human_zip",
-          analysis: {
-            totalFiles:
-              responseData?.processing?.totalFiles || fileStats.totalFiles,
-            oracleFiles: 0,
-            solutionName: "",
-            linesOfCode: fileStats.totalLines,
-            fileSize: formatBytes(fileStats.totalSize),
-            namespaces: [],
-            classes: 0,
-            dependencies: [],
-          },
-          conversion: {
-            totalConverted:
-              responseData?.processing?.processedFiles ||
-              mappedConvertedFiles.length ||
-              fileStats.totalFiles,
-            totalFiles:
-              responseData?.processing?.totalFiles || fileStats.totalFiles,
-            successRate: responseData?.processing?.successRate || 100,
-            convertedFiles: mappedConvertedFiles,
-          },
-          zipFilename: zipName,
-        });
+          // Extract results array - API response has results at top level
+          // responseData = data || resp, so responseData.results works for both API and WebSocket
+          const results = (responseData?.results || // Direct from responseData (works for both cases)
+            data?.result?.results || // WebSocket wrapped structure (if data has result wrapper)
+            []) as any[]; // Empty if not found
+
+          // Map standardized results array to convertedFiles format
+          const mappedConvertedFiles = results
+            .filter((result: any) => result != null && result.fileName)
+            .map((result: any) => {
+              // Use standardized fields from API response
+              const originalContent = result.originalContent || "";
+              const convertedContent = result.convertedContent || "";
+              const fileName = result.fileName;
+
+              return {
+                original: fileName,
+                converted: `${fileName.replace(
+                  /\.(bat|sh|ksh|bash|zsh|cmd|ps1|py)$/i,
+                  ""
+                )}.${batchOutputFormat === "doc" ? "docx" : "txt"}`,
+                oracleContent: originalContent,
+                snowflakeContent: convertedContent,
+                targetFolder: result.targetFolder || "",
+              };
+            });
+
+          setConvertedFile({
+            success: true,
+            message: responseData?.message || "completed",
+            source: responseData?.source || "human",
+            jobId: jobId || "batch_human_zip",
+            analysis: {
+              totalFiles:
+                responseData?.processing?.totalFiles || fileStats.totalFiles,
+              oracleFiles: 0,
+              solutionName: "",
+              linesOfCode: fileStats.totalLines,
+              fileSize: formatBytes(fileStats.totalSize),
+              namespaces: [],
+              classes: 0,
+              dependencies: [],
+            },
+            conversion: {
+              totalConverted:
+                responseData?.processing?.processedFiles ||
+                mappedConvertedFiles.length ||
+                fileStats.totalFiles,
+              totalFiles:
+                responseData?.processing?.totalFiles || fileStats.totalFiles,
+              successRate: responseData?.processing?.successRate || 100,
+              convertedFiles: mappedConvertedFiles,
+            },
+            zipFilename: zipName,
+          });
+        }
+
         setProgress(100);
         setShowZipOverlay(false);
 
@@ -972,8 +1418,24 @@ const Dashboard: React.FC = () => {
           !!data?.result?.zipFilename ||
           !!data?.zipFilename ||
           !!resp?.zipFilename;
-        if (completedStatus || completedByProgress || hasZip) {
-          finalizeBatchHuman(data);
+        const hasResults =
+          !!data?.result?.results || !!data?.results || !!resp?.results;
+        const hasSingleFileResult =
+          !!data?.result?.outputFiles ||
+          !!data?.outputFiles ||
+          !!data?.result?.fileName ||
+          !!data?.fileName ||
+          !!resp?.outputFiles ||
+          !!resp?.fileName;
+        if (
+          completedStatus ||
+          completedByProgress ||
+          (hasZip && hasResults) ||
+          hasSingleFileResult
+        ) {
+          setTimeout(() => {
+            finalizeBatchHuman(data);
+          }, 300);
         } else if (data?.status === "failed") {
           setErrorMessage(data.error || "Batch processing failed");
           setShowZipOverlay(false);
@@ -1003,8 +1465,17 @@ const Dashboard: React.FC = () => {
         } catch (_) {}
       });
 
+      // Check if this is a single-file response
+      const isSingleFileResponse =
+        (resp as any)?.outputFiles && !(resp as any)?.zipFilename;
+
       // If API already returned a packaged zip without emitting progress, finalize immediately
-      if (resp?.success && (resp?.results || resp?.zipFilename)) {
+      if (
+        resp?.success &&
+        ((isSingleFileResponse && (resp as any)?.outputFiles) ||
+          resp?.results ||
+          resp?.zipFilename)
+      ) {
         finalizeBatchHuman(resp);
       }
     } catch (error) {
@@ -1082,18 +1553,45 @@ const Dashboard: React.FC = () => {
           !!data?.result?.zipFilename ||
           !!data?.zipFilename ||
           !!apiResponse?.zipFilename;
+        const hasResults =
+          !!data?.result?.results || !!data?.results || !!apiResponse?.results;
+        const hasSingleFileResult =
+          !!data?.result?.outputFiles ||
+          !!data?.outputFiles ||
+          !!data?.result?.fileName ||
+          !!data?.fileName ||
+          !!data?.result?.convertedContent ||
+          !!data?.convertedContent ||
+          !!apiResponse?.outputFiles ||
+          !!apiResponse?.fileName ||
+          !!apiResponse?.convertedContent;
 
-        if (completedStatus || completedByProgress || hasZip) {
+        if (
+          completedStatus ||
+          completedByProgress ||
+          (hasZip && hasResults) ||
+          hasSingleFileResult
+        ) {
           let finalData: any = null;
 
           if (
             data?.result &&
-            (data.result.results || data.result.zipFilename)
+            (data.result.results ||
+              data.result.zipFilename ||
+              data.result.outputFiles ||
+              data.result.fileName)
           ) {
             finalData = data.result;
-          } else if (data?.results || data?.zipFilename) {
+          } else if (
+            data?.results ||
+            data?.zipFilename ||
+            data?.outputFiles ||
+            data?.fileName
+          ) {
             finalData = data;
           } else if (apiResponse?.results && apiResponse?.zipFilename) {
+            finalData = apiResponse;
+          } else if (apiResponse?.outputFiles || apiResponse?.fileName) {
             finalData = apiResponse;
           }
 
@@ -1105,7 +1603,9 @@ const Dashboard: React.FC = () => {
             }
             activeJobIdRef.current = null;
 
-            finalizeIdmcToJson(finalData);
+            setTimeout(() => {
+              finalizeIdmcToJson(finalData);
+            }, 300);
           }
         } else if (data?.status === "failed") {
           setErrorMessage(
@@ -1142,6 +1642,10 @@ const Dashboard: React.FC = () => {
         );
       }
 
+      // Check if this is a single-file response (when single file uploaded instead of ZIP)
+      const isSingleFileResponse =
+        (apiResponse as any)?.outputFiles && !(apiResponse as any)?.zipFilename;
+
       jobId = (apiResponse as any).jobId;
       if (jobId) {
         activeJobIdRef.current = jobId;
@@ -1150,9 +1654,9 @@ const Dashboard: React.FC = () => {
       // If API already returned complete response, finalize immediately
       if (
         apiResponse?.success &&
-        (apiResponse as any)?.results &&
-        (apiResponse as any)?.zipFilename &&
-        !finalizedRef.current
+        !finalizedRef.current &&
+        ((isSingleFileResponse && (apiResponse as any)?.outputFiles) ||
+          ((apiResponse as any)?.results && (apiResponse as any)?.zipFilename))
       ) {
         socket.off("progress-update");
         socket.off("system-notification");
@@ -1185,71 +1689,131 @@ const Dashboard: React.FC = () => {
     if (finalizedRef.current) return;
     finalizedRef.current = true;
 
-    const zipFilename =
-      response.zipFilename ||
-      (response.zipFilePath
-        ? response.zipFilePath.split("/").pop()
-        : undefined);
+    // Check if this is a single-file response
+    const isSingleFileResponse =
+      (response?.outputFiles && !response?.zipFilename) ||
+      (response?.fileName && !response?.zipFilename);
 
-    const results = response.results || [];
-    const processing = response.processing || {
-      totalFiles: 0,
-      processedFiles: 0,
-      failedFiles: 0,
-      successRate: 0,
-    };
+    if (isSingleFileResponse) {
+      // Handle single-file response structure
+      const outputFiles = response?.outputFiles || [];
+      const originalContent = response?.originalContent || "";
+      const convertedContent = response?.convertedContent || "";
+      const fileName =
+        response?.fileName ||
+        uploadedFile?.name ||
+        selectedFile?.name ||
+        "input.json";
 
-    const mappedConvertedFiles = results
-      .filter((result: any) => result && result.fileName)
-      .map((result: any) => {
-        const originalContent = String(result.originalContent || "");
-        const convertedContent = String(result.convertedContent || "");
-        const fileName = String(result.fileName || "");
+      // Create a converted file structure for single file
+      const mappedConverted = outputFiles.map((f: any) => ({
+        original: fileName,
+        converted: f.name || "output.bin",
+        oracleContent: originalContent,
+        snowflakeContent: convertedContent,
+        targetFolder: f.path || "", // Store file path for downloads
+      }));
 
-        // Determine output extension based on file name or default to .bin
-        // The API can return .bin, .txt, .doc, or combinations depending on outputFormat
-        // Extract the actual extension from the fileName if present
-        const match = fileName.match(/\.(bin|txt|doc)$/i);
-        const outputExt = match ? match[0] : ".bin";
-        return {
-          original: fileName,
-          converted: `${fileName.replace(
-            /\.(md|txt|json|bin|doc)$/i,
-            ""
-          )}${outputExt}`,
-          oracleContent: originalContent,
-          snowflakeContent: convertedContent,
-          targetFolder: result.targetFolder || "",
-        };
+      // Determine if this is a ZIP file or single file for download
+      const firstOutputFile = outputFiles[0];
+      const isZipFile = firstOutputFile?.name?.endsWith(".zip") || false;
+      const downloadIdentifier = isZipFile
+        ? firstOutputFile?.name || "output.zip"
+        : firstOutputFile?.path || firstOutputFile?.name || "output.bin";
+
+      setConvertedFile({
+        success: true,
+        message: response.message || "completed",
+        source: response.source || "idmc-to-json",
+        jobId: response.jobId || "idmc_to_json_single",
+        analysis: {
+          totalFiles: 1,
+          oracleFiles: 0,
+          solutionName: "",
+          linesOfCode: fileStats?.totalLines || 0,
+          fileSize: formatBytes(
+            fileStats?.totalSize || uploadedFile?.size || 0
+          ),
+          namespaces: [],
+          classes: 0,
+          dependencies: [],
+        },
+        conversion: {
+          totalConverted: 1,
+          totalFiles: 1,
+          successRate: 100,
+          convertedFiles: mappedConverted,
+        },
+        zipFilename: downloadIdentifier, // Store path for single files, filename for ZIPs
       });
+    } else {
+      // Handle ZIP response structure
+      const zipFilename =
+        response.zipFilename ||
+        (response.zipFilePath
+          ? response.zipFilePath.split("/").pop()
+          : undefined);
 
-    setConvertedFile({
-      success: true,
-      message: response.message || "completed",
-      source: response.source || "idmc-to-json",
-      jobId: response.jobId || "idmc_to_json_zip",
-      analysis: {
-        totalFiles: processing.totalFiles || fileStats?.totalFiles || 0,
-        oracleFiles: 0,
-        solutionName: "",
-        linesOfCode: fileStats?.totalLines || 0,
-        fileSize: formatBytes(fileStats?.totalSize || 0),
-        namespaces: [],
-        classes: 0,
-        dependencies: [],
-      },
-      conversion: {
-        totalConverted:
-          processing.processedFiles ||
-          mappedConvertedFiles.length ||
-          fileStats?.totalFiles ||
-          0,
-        totalFiles: processing.totalFiles || fileStats?.totalFiles || 0,
-        successRate: processing.successRate || 100,
-        convertedFiles: mappedConvertedFiles,
-      },
-      zipFilename: zipFilename || "idmc_mapping.zip",
-    });
+      const results = response.results || [];
+      const processing = response.processing || {
+        totalFiles: 0,
+        processedFiles: 0,
+        failedFiles: 0,
+        successRate: 0,
+      };
+
+      const mappedConvertedFiles = results
+        .filter((result: any) => result && result.fileName)
+        .map((result: any) => {
+          const originalContent = String(result.originalContent || "");
+          const convertedContent = String(result.convertedContent || "");
+          const fileName = String(result.fileName || "");
+
+          // Determine output extension based on file name or default to .bin
+          // The API can return .bin, .txt, .doc, .json, or combinations depending on outputFormat
+          // Extract the actual extension from the fileName if present
+          const match = fileName.match(/\.(bin|txt|doc|docx|json)$/i);
+          const outputExt = match ? match[0] : ".bin";
+          return {
+            original: fileName,
+            converted: `${fileName.replace(
+              /\.(md|txt|json|bin|doc|docx)$/i,
+              ""
+            )}${outputExt}`,
+            oracleContent: originalContent,
+            snowflakeContent: convertedContent,
+            targetFolder: result.targetFolder || "",
+          };
+        });
+
+      setConvertedFile({
+        success: true,
+        message: response.message || "completed",
+        source: response.source || "idmc-to-json",
+        jobId: response.jobId || "idmc_to_json_zip",
+        analysis: {
+          totalFiles: processing.totalFiles || fileStats?.totalFiles || 0,
+          oracleFiles: 0,
+          solutionName: "",
+          linesOfCode: fileStats?.totalLines || 0,
+          fileSize: formatBytes(fileStats?.totalSize || 0),
+          namespaces: [],
+          classes: 0,
+          dependencies: [],
+        },
+        conversion: {
+          totalConverted:
+            processing.processedFiles ||
+            mappedConvertedFiles.length ||
+            fileStats?.totalFiles ||
+            0,
+          totalFiles: processing.totalFiles || fileStats?.totalFiles || 0,
+          successRate: processing.successRate || 100,
+          convertedFiles: mappedConvertedFiles,
+        },
+        zipFilename: zipFilename || "idmc_mapping.zip",
+      });
+    }
 
     setProgress(100);
     setShowZipOverlay(false);
@@ -1261,13 +1825,14 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  // SINGLE Convert via Unified API (no websocket)
+  // SINGLE Convert via Unified API (with websocket support)
   const handleSingleConvert = async () => {
     try {
       setIsConvertingSingle(true);
       setSingleResult("");
       setSingleOutputs([]);
       setErrorMessage("");
+      finalizedRef.current = false;
 
       const target = isSnowflakeTab
         ? "snowflake"
@@ -1277,65 +1842,39 @@ const Dashboard: React.FC = () => {
         ? "idmc"
         : "idmc";
 
-      if (selectedTab === "idmc-batch") {
-        // Single batch script to IDMC summary
-        const defaultFileName = customFileName.trim() || "run.sh";
-        const res = await idmcBatch({
-          inputType: "single",
-          script: singleSourceCode,
-          name: defaultFileName,
-          outputFormat: batchOutputFormat,
-        });
-        // Try to capture downloadable outputs if provided by API
+      // Helper function to finalize single file conversion
+      const finalizeSingleConversion = (res: any, jobId?: string) => {
+        if (finalizedRef.current) return;
+        finalizedRef.current = true;
+
+        // Handle different response structures
         if (res?.outputFiles && Array.isArray(res.outputFiles)) {
           setSingleOutputs(res.outputFiles);
         } else if (res?.filePath) {
           setSingleOutputs([
             {
-              name: res.fileName || "idmc-summary.json",
+              name: res.fileName || "output.json",
               path: res.filePath,
-              mime: "application/json",
+              mime: res.mime || "application/json",
               kind: "single",
             },
           ]);
         }
-        // Show only the output content if available
+
+        // Set result content based on response structure
         if (typeof res?.jsonContent === "string" && res.jsonContent.trim()) {
           setSingleResult(res.jsonContent);
+        } else if (
+          typeof res?.convertedContent === "string" &&
+          res.convertedContent.trim()
+        ) {
+          setSingleResult(res.convertedContent);
         } else if (
           Array.isArray(res?.idmcSummaries) &&
           res.idmcSummaries.length > 0 &&
           typeof res.idmcSummaries[0]?.idmcSummary === "string"
         ) {
           setSingleResult(res.idmcSummaries[0].idmcSummary);
-        } else {
-          setSingleResult("");
-        }
-      } else if (selectedTab === "batch-human") {
-        // Human language summary of batch script
-        const defaultFileName = customFileName.trim() || "run.sh";
-        const res = await idmcBatchSummary({
-          inputType: "single",
-          script: singleSourceCode,
-          name: defaultFileName,
-          outputFormat: batchOutputFormat,
-        });
-        // Try to capture downloadable outputs if provided by API
-        if (res?.outputFiles && Array.isArray(res.outputFiles)) {
-          setSingleOutputs(res.outputFiles);
-        } else if (res?.filePath) {
-          setSingleOutputs([
-            {
-              name: res.fileName || "human-summary.txt",
-              path: res.filePath,
-              mime: "text/plain",
-              kind: "single",
-            },
-          ]);
-        }
-        // Show only the output content if available
-        if (typeof res?.jsonContent === "string" && res.jsonContent.trim()) {
-          setSingleResult(res.jsonContent);
         } else if (
           typeof res?.humanReadableSummary === "string" &&
           res.humanReadableSummary.trim()
@@ -1343,9 +1882,91 @@ const Dashboard: React.FC = () => {
           setSingleResult(res.humanReadableSummary);
         } else if (typeof res?.summary === "string" && res.summary.trim()) {
           setSingleResult(res.summary);
+        } else if (res?.outputFiles && res.outputFiles.length > 0) {
+          setSingleResult(
+            res.outputFiles.map((f: any) => `${f.name} (${f.mime})`).join("\n")
+          );
         } else {
           setSingleResult("");
         }
+
+        // Cleanup - no overlay for single file conversions
+        setIsConvertingSingle(false);
+        if (jobId && activeJobIdRef.current) {
+          disconnectSocket(jobId);
+          activeJobIdRef.current = null;
+        }
+      };
+
+      let res: any = null;
+      let jobId: string | undefined = undefined;
+
+      // Set up WebSocket listener BEFORE making API call (for async conversions)
+      const socket = connectSocket();
+      socket.off("progress-update");
+
+      socket.on("progress-update", (data) => {
+        console.log("[socket] single-file progress-update:", data);
+
+        if (finalizedRef.current) return;
+
+        // Don't show overlay for single file conversions - just track progress internally
+        // The button loading state (isConvertingSingle) handles the UI feedback
+
+        // Check if conversion is complete
+        const completedStatus =
+          data?.status === "completed" || data?.status === "success";
+        const completedByProgress =
+          typeof data?.progress === "number" && data.progress >= 100;
+        const hasResult =
+          !!data?.result || !!data?.jsonContent || !!data?.outputFiles;
+
+        if (completedStatus || completedByProgress || hasResult) {
+          // Extract result from WebSocket data
+          const resultData = data?.result || data;
+          setTimeout(() => {
+            finalizeSingleConversion(resultData, jobId);
+          }, 300);
+        } else if (data?.status === "failed") {
+          setErrorMessage(data.error || "Conversion failed");
+          setCurrentPage("error");
+          setIsConvertingSingle(false);
+          if (activeJobIdRef.current) {
+            disconnectSocket(activeJobIdRef.current);
+            activeJobIdRef.current = null;
+          }
+        }
+      });
+
+      socket.on("system-notification", (payload) => {
+        try {
+          const { type, message } = payload || {};
+          console.log("[system-notification]", type, message);
+        } catch (_) {}
+      });
+
+      // Don't show overlay for single file conversions - button shows loading state
+
+      if (selectedTab === "idmc-batch") {
+        // Single batch script to IDMC summary
+        const defaultFileName = customFileName.trim() || "run.sh";
+        res = await idmcBatch({
+          inputType: "single",
+          script: singleSourceCode,
+          name: defaultFileName,
+          outputFormat: batchOutputFormat,
+        });
+        jobId = res?.jobId;
+      } else if (selectedTab === "batch-human") {
+        // Human language summary of batch script
+        const defaultFileName = customFileName.trim() || "run.sh";
+        res = await idmcBatchSummary({
+          inputType: "single",
+          script: singleSourceCode,
+          name: defaultFileName,
+          outputFormat: batchOutputFormat,
+        });
+        jobId = res?.jobId;
       } else if (selectedTab === "idmc-to-json") {
         // IDMC Summary to JSON conversion
         const defaultFileName = customFileName.trim() || "mapping_summary.md";
@@ -1354,16 +1975,8 @@ const Dashboard: React.FC = () => {
           fileName: defaultFileName,
           outputFormat: idmcToJsonOutputFormat,
         };
-        const res = await idmcSummaryToJson(idmcToJsonPayload);
-        // Type guard: single file response has outputFiles property
-        if ("outputFiles" in res) {
-          // This is IdmcSummaryToJsonSingleResponse
-          setSingleOutputs(res.outputFiles || []);
-          setSingleResult(res.convertedContent || "");
-        } else {
-          // This should not happen for single file conversion, but handle gracefully
-          setSingleResult(JSON.stringify(res, null, 2));
-        }
+        res = await idmcSummaryToJson(idmcToJsonPayload);
+        jobId = (res as any)?.jobId;
       } else {
         // SQL -> IDMC or Oracle -> Snowflake
         const defaultFileName = customFileName.trim() || "input.sql";
@@ -1375,37 +1988,37 @@ const Dashboard: React.FC = () => {
           fileName: defaultFileName,
         };
         if (target === "idmc") payload.outputFormat = outputFormat;
-        const res = await convertUnified(payload);
-        if ("outputFiles" in res) {
-          const r = res as UnifiedSingleResponse & {
-            originalContent?: string;
-            convertedContent?: string;
-          };
-          setSingleOutputs(r.outputFiles || []);
-          // Prefer convertedContent if provided by API; fall back to jsonContent
-          if ((r as any).convertedContent) {
-            setSingleResult((r as any).convertedContent || "");
-          } else if (r.jsonContent) {
-            setSingleResult(r.jsonContent);
-          } else {
-            setSingleResult(
-              (r.outputFiles || [])
-                .map((f) => `${f.name} (${f.mime})`)
-                .join("\n")
-            );
-          }
-        } else {
-          setSingleResult(JSON.stringify(res, null, 2));
-        }
+        res = await convertUnified(payload);
+        jobId = (res as any)?.jobId;
       }
+
+      // Store jobId for WebSocket cleanup
+      if (jobId) {
+        activeJobIdRef.current = jobId;
+      }
+
+      // If response is already complete (no jobId or immediate result), finalize immediately
+      if (
+        !jobId ||
+        (res?.success &&
+          (res?.outputFiles || res?.jsonContent || res?.convertedContent))
+      ) {
+        // No async processing needed, finalize immediately
+        finalizeSingleConversion(res, jobId);
+      }
+      // Otherwise, WebSocket will handle the completion via progress-update event
     } catch (error) {
       console.error("Single conversion failed", error);
       setErrorMessage(
         error instanceof Error ? error.message : "Conversion failed"
       );
       setCurrentPage("error");
-    } finally {
       setIsConvertingSingle(false);
+      if (activeJobIdRef.current) {
+        disconnectSocket(activeJobIdRef.current);
+        activeJobIdRef.current = null;
+      }
+      finalizedRef.current = false;
     }
   };
 
@@ -1457,9 +2070,24 @@ const Dashboard: React.FC = () => {
       return;
     }
     try {
-      // Use conversionDownload API which supports both filename and filePath
-      // This works for all conversion types (idmc-sql, snowflake, idmc-batch, batch-human)
-      await conversionDownload({ filename: zipName });
+      // Check if zipFilename is actually a ZIP file or a single file path
+      const isZipFile = zipName.endsWith(".zip");
+
+      if (isZipFile) {
+        // Use filename parameter for ZIP files
+        await conversionDownload({ filename: zipName });
+      } else {
+        // For single files, try to get filePath from convertedFiles or use zipFilename as path
+        const filePath =
+          convertedFile?.conversion?.convertedFiles?.[0]?.targetFolder ||
+          zipName;
+        if (filePath) {
+          await conversionDownload({ filePath: filePath });
+        } else {
+          // Fallback: try using zipName as filePath if it looks like a path
+          await conversionDownload({ filePath: zipName });
+        }
+      }
     } catch (error) {
       console.error("Download error:", error);
       setErrorMessage("Failed to download files");
@@ -1652,6 +2280,23 @@ const Dashboard: React.FC = () => {
                     ? handleIdmcToJsonZipConvert
                     : handleZipConvert
                 }
+                accept={
+                  isIdmcToJsonTab
+                    ? ".zip,.txt,.bin,.md,.doc,.docx,.json"
+                    : selectedTab === "idmc-batch" ||
+                      selectedTab === "batch-human"
+                    ? ".zip,.sh,.bat,.ksh,.bash,.zsh,.cmd,.ps1"
+                    : ".zip,.sql,.txt,.bin,.md,.pls,.pkg,.prc,.fnc,.rs,.redshift"
+                }
+                helpText={
+                  isIdmcToJsonTab
+                    ? "Supports ZIP files containing IDMC Summary files (.txt, .bin, .md, .doc, .docx, .json)"
+                    : selectedTab === "idmc-batch"
+                    ? "Supports ZIP files containing batch scripts (.sh, .bat, .ksh, .bash, .zsh, .cmd, .ps1)"
+                    : selectedTab === "batch-human"
+                    ? "Supports ZIP files containing batch scripts (.sh, .bat, .ksh, .bash, .zsh, .cmd, .ps1)"
+                    : undefined
+                }
               />
             ) : (
               <SingleEditorsPanel
@@ -1662,7 +2307,7 @@ const Dashboard: React.FC = () => {
                 onDownload={handleSingleDownload}
                 placeholder={
                   isBatchHuman || selectedTab === "idmc-batch"
-                    ? "Paste your .sh/.bat script here..."
+                    ? "Paste your batch script here (.sh, .bat, .ksh, .bash, .zsh, .cmd, .ps1)..."
                     : selectedTab === "idmc-to-json"
                     ? "Paste IDMC mapping summary here (markdown/text format)..."
                     : isSnowflakeTab
@@ -1674,7 +2319,7 @@ const Dashboard: React.FC = () => {
           </div>
         )}
 
-        {/* WebSocket progress for ZIP - takes priority over isProcessing */}
+        {/* WebSocket progress overlay - only shows for ZIP conversions, not single file */}
         {inputMode === "zip" && showZipOverlay && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-md animate-fadeIn">
             <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 p-10 sm:p-12 w-11/12 max-w-2xl">
