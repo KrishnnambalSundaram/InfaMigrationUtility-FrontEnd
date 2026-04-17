@@ -3,7 +3,7 @@ import apiClient from "./apiClient";
 interface UploadResponse {
   message?: string;
   data?: any;
-  file?:any;
+  file?: any;
   success?: any;
 }
 interface ConvertedFileItem {
@@ -61,21 +61,21 @@ export const fileUpload = async (file: File): Promise<UploadResponse> => {
   }
 };
 
-export const fileConvert = async (zipFilePath: string): Promise<FilePathResponse> =>{
-    const token = localStorage.getItem('token');
-    
-    console.log('fileConvert called with:', { zipFilePath, token: token ? 'present' : 'missing' });
-    
-    if (!zipFilePath) {
-      throw new Error('Zip file path is required');
-    }
-    
-    if (!token) {
-      throw new Error('Authentication token is missing');
-    }
-    
+export const fileConvert = async (zipFilePath: string): Promise<FilePathResponse> => {
+  const token = localStorage.getItem('token');
+
+  console.log('fileConvert called with:', { zipFilePath, token: token ? 'present' : 'missing' });
+
+  if (!zipFilePath) {
+    throw new Error('Zip file path is required');
+  }
+
+  if (!token) {
+    throw new Error('Authentication token is missing');
+  }
+
   try {
-    const response = await apiClient.post<FilePathResponse>('/convert', {"zipFilePath":zipFilePath}, {
+    const response = await apiClient.post<FilePathResponse>('/convert', { "zipFilePath": zipFilePath }, {
       headers: {
         Authorization: `Bearer ${token}`,
       },
@@ -85,16 +85,16 @@ export const fileConvert = async (zipFilePath: string): Promise<FilePathResponse
     return response.data;
   } catch (error) {
     console.error('fileConvert error:', error);
-    
+
     if (error instanceof Error) {
       throw new Error(`Convert failed: ${error.message}`);
     } else {
       throw new Error('Convert failed: Unknown error');
     }
-  } 
+  }
 }
 
-export const fileDownload = async (zipFilename : string): Promise<void> => {
+export const fileDownload = async (zipFilename: string): Promise<void> => {
   const token = localStorage.getItem('token') || '';
 
   try {
@@ -124,7 +124,7 @@ export const fileDownload = async (zipFilename : string): Promise<void> => {
     // Cleanup
     document.body.removeChild(link);
     window.URL.revokeObjectURL(downloadUrl);
-    
+
     console.log('Download successful');
   } catch (error) {
     console.error('Download failed:', error);
@@ -218,7 +218,7 @@ export interface ProgressResponse {
 export const getConversionProgress = async (jobId: string): Promise<ProgressResponse> => {
   const token = localStorage.getItem('token') || '';
   try {
-    const response = await apiClient.get<ProgressResponse>(`/conversion/progress/${encodeURIComponent(jobId)}` , {
+    const response = await apiClient.get<ProgressResponse>(`/conversion/progress/${encodeURIComponent(jobId)}`, {
       headers: {
         Authorization: `Bearer ${token}`,
       }
@@ -364,7 +364,7 @@ export const idmcBatch = async (payload: IdmcBatchRequest): Promise<IdmcSummaryR
       delete normalizedPayload.zipFilePath;
     }
   }
-  
+
   const response = await apiClient.post<IdmcSummaryResponse>('/idmc/batch-idmc-summary', normalizedPayload, {
     headers: {
       Authorization: `Bearer ${token}`,
@@ -386,7 +386,7 @@ export const idmcBatchSummary = async (
       delete normalizedPayload.zipFilePath;
     }
   }
-  
+
   const response = await apiClient.post<HumanLanguageResponse>('/idmc/batch-human-language', normalizedPayload, {
     headers: {
       Authorization: `Bearer ${token}`,

@@ -134,6 +134,8 @@ const Dashboard: React.FC = () => {
   // Output format for IDMC Summary to JSON
   const [idmcToJsonOutputFormat, setIdmcToJsonOutputFormat] =
     useState<IdmcSummaryOutputFormat>("bin");
+  // Connection ID for IDMC Summary to JSON
+  const [connectionId, setConnectionId] = useState<string>("");
   // Custom file name for conversions
   const [customFileName, setCustomFileName] = useState<string>("");
 
@@ -404,8 +406,8 @@ const Dashboard: React.FC = () => {
             isIdmcToJsonTab
               ? "Please upload a ZIP file or a valid IDMC Summary file (.txt, .bin, .md, .doc, .docx, .json)"
               : selectedTab === "idmc-batch" || selectedTab === "batch-human"
-              ? "Please upload a ZIP file or a valid batch script (.sh, .bat, .ksh, .bash, .zsh, .cmd, .ps1)"
-              : "Please upload a ZIP file or a valid SQL file (.sql, .plsql, etc.)"
+                ? "Please upload a ZIP file or a valid batch script (.sh, .bat, .ksh, .bash, .zsh, .cmd, .ps1)"
+                : "Please upload a ZIP file or a valid SQL file (.sql, .plsql, etc.)"
           );
           setCurrentPage("error");
           return;
@@ -492,8 +494,8 @@ const Dashboard: React.FC = () => {
           isIdmcToJsonTab
             ? "Please upload a ZIP file or a valid IDMC Summary file (.txt, .bin, .md, .doc, .docx, .json)"
             : selectedTab === "idmc-batch" || selectedTab === "batch-human"
-            ? "Please upload a ZIP file or a valid batch script (.sh, .bat, .ksh, .bash, .zsh, .cmd, .ps1)"
-            : "Please upload a ZIP file or a valid SQL file (.sql, .plsql, etc.)"
+              ? "Please upload a ZIP file or a valid batch script (.sh, .bat, .ksh, .bash, .zsh, .cmd, .ps1)"
+              : "Please upload a ZIP file or a valid SQL file (.sql, .plsql, etc.)"
         );
         setCurrentPage("error");
         return;
@@ -658,9 +660,8 @@ const Dashboard: React.FC = () => {
             converted: f.fileName
               ? isSnowflakeTab
                 ? `${f.fileName.replace(/\.(sql|plsql)$/i, "")}.sql`
-                : `${f.fileName.replace(/\.(sql|plsql)$/i, "")}.${
-                    outputFormat === "docx" ? "docx" : "json"
-                  }`
+                : `${f.fileName.replace(/\.(sql|plsql)$/i, "")}.${outputFormat === "docx" ? "docx" : "json"
+                }`
               : f.converted || f.name || "",
             oracleContent: f.originalContent || "",
             snowflakeContent: f.convertedContent || "",
@@ -720,12 +721,12 @@ const Dashboard: React.FC = () => {
           typeof data?.progress === "number"
             ? data.progress
             : typeof (data as any)?.percentage === "number"
-            ? (data as any).percentage
-            : data?.filesConverted && data?.totalFiles
-            ? Math.round(
-                (data.filesConverted / Math.max(1, data.totalFiles)) * 100
-              )
-            : progress;
+              ? (data as any).percentage
+              : data?.filesConverted && data?.totalFiles
+                ? Math.round(
+                  (data.filesConverted / Math.max(1, data.totalFiles)) * 100
+                )
+                : progress;
         console.log("[socket] computed progress:", computedProgress);
         setProgress(Math.max(1, Math.min(100, computedProgress || 1)));
         if (!showZipOverlay) setShowZipOverlay(true);
@@ -785,7 +786,7 @@ const Dashboard: React.FC = () => {
         try {
           const { type, message } = payload || {};
           console.log("[system-notification]", type, message);
-        } catch (_) {}
+        } catch (_) { }
       });
 
       // If API already returned a complete response without emitting progress, finalize immediately
@@ -863,12 +864,12 @@ const Dashboard: React.FC = () => {
           typeof data?.progress === "number"
             ? data.progress
             : typeof (data as any)?.percentage === "number"
-            ? (data as any).percentage
-            : data?.filesConverted && data?.totalFiles
-            ? Math.round(
-                (data.filesConverted / Math.max(1, data.totalFiles)) * 100
-              )
-            : progress;
+              ? (data as any).percentage
+              : data?.filesConverted && data?.totalFiles
+                ? Math.round(
+                  (data.filesConverted / Math.max(1, data.totalFiles)) * 100
+                )
+                : progress;
         setProgress(Math.max(1, Math.min(100, computedProgress || 1)));
         if (!showZipOverlay) setShowZipOverlay(true);
 
@@ -969,7 +970,7 @@ const Dashboard: React.FC = () => {
         try {
           const { type, message } = payload || {};
           console.log("[system-notification]", type, message);
-        } catch (_) {}
+        } catch (_) { }
       });
 
       // Call API endpoint: POST /api/idmc/batch-idmc-summary
@@ -1060,8 +1061,7 @@ const Dashboard: React.FC = () => {
         original: fileName,
         converted:
           f.name ||
-          `${fileName.replace(/\.(bat|sh|ksh|bash|zsh|cmd|ps1|py)$/i, "")}.${
-            batchOutputFormat === "doc" ? "docx" : "txt"
+          `${fileName.replace(/\.(bat|sh|ksh|bash|zsh|cmd|ps1|py)$/i, "")}.${batchOutputFormat === "doc" ? "docx" : "txt"
           }`,
         oracleContent: originalContent,
         snowflakeContent: convertedContent,
@@ -1387,12 +1387,12 @@ const Dashboard: React.FC = () => {
           typeof data?.progress === "number"
             ? data.progress
             : typeof (data as any)?.percentage === "number"
-            ? (data as any).percentage
-            : data?.filesConverted && data?.totalFiles
-            ? Math.round(
-                (data.filesConverted / Math.max(1, data.totalFiles)) * 100
-              )
-            : progress;
+              ? (data as any).percentage
+              : data?.filesConverted && data?.totalFiles
+                ? Math.round(
+                  (data.filesConverted / Math.max(1, data.totalFiles)) * 100
+                )
+                : progress;
         setProgress(Math.max(1, Math.min(100, computedProgress || 1)));
         if (!showZipOverlay) setShowZipOverlay(true);
 
@@ -1462,7 +1462,7 @@ const Dashboard: React.FC = () => {
         try {
           const { type, message } = payload || {};
           console.log("[system-notification]", type, message);
-        } catch (_) {}
+        } catch (_) { }
       });
 
       // Check if this is a single-file response
@@ -1522,12 +1522,12 @@ const Dashboard: React.FC = () => {
           typeof data?.progress === "number"
             ? data.progress
             : typeof (data as any)?.percentage === "number"
-            ? (data as any).percentage
-            : data?.filesConverted && data?.totalFiles
-            ? Math.round(
-                (data.filesConverted / Math.max(1, data.totalFiles)) * 100
-              )
-            : progress;
+              ? (data as any).percentage
+              : data?.filesConverted && data?.totalFiles
+                ? Math.round(
+                  (data.filesConverted / Math.max(1, data.totalFiles)) * 100
+                )
+                : progress;
         setProgress(Math.max(1, Math.min(100, computedProgress || 1)));
         if (!showZipOverlay) setShowZipOverlay(true);
 
@@ -1624,7 +1624,7 @@ const Dashboard: React.FC = () => {
         try {
           const { type, message } = payload || {};
           console.log("[system-notification]", type, message);
-        } catch (_) {}
+        } catch (_) { }
       });
 
       // Call API endpoint: POST /api/idmc/summary-to-json
@@ -1837,10 +1837,10 @@ const Dashboard: React.FC = () => {
       const target = isSnowflakeTab
         ? "snowflake"
         : isIdmcTab
-        ? "idmc"
-        : isBatchHuman
-        ? "idmc"
-        : "idmc";
+          ? "idmc"
+          : isBatchHuman
+            ? "idmc"
+            : "idmc";
 
       // Helper function to finalize single file conversion
       const finalizeSingleConversion = (res: any, jobId?: string) => {
@@ -1942,7 +1942,7 @@ const Dashboard: React.FC = () => {
         try {
           const { type, message } = payload || {};
           console.log("[system-notification]", type, message);
-        } catch (_) {}
+        } catch (_) { }
       });
 
       // Don't show overlay for single file conversions - button shows loading state
@@ -2041,10 +2041,10 @@ const Dashboard: React.FC = () => {
               ? "idmc-summary.docx"
               : "idmc-summary.txt"
             : selectedTab === "batch-human"
-            ? batchOutputFormat === "doc"
-              ? "human-summary.docx"
-              : "human-summary.txt"
-            : "result.txt";
+              ? batchOutputFormat === "doc"
+                ? "human-summary.docx"
+                : "human-summary.txt"
+              : "result.txt";
         const blob = new Blob([singleResult], { type: mime });
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement("a");
@@ -2116,11 +2116,10 @@ const Dashboard: React.FC = () => {
     <button
       key={key}
       onClick={() => setSelectedTab(key)}
-      className={`px-5 py-2.5 rounded-full text-sm manrope-medium transition-all duration-300 ${
-        selectedTab === key
-          ? "bg-gradient-to-r from-[#E46356] to-[#B978B2] text-white shadow-lg shadow-[#E46356]/30 transform scale-105"
-          : "bg-white border border-neutral-300 text-gray-700 hover:border-[#E46356]/50 hover:bg-gray-50 hover:shadow-md"
-      }`}
+      className={`px-5 py-2.5 rounded-full text-sm manrope-medium transition-all duration-300 ${selectedTab === key
+        ? "bg-gradient-to-r from-[#E46356] to-[#B978B2] text-white shadow-lg shadow-[#E46356]/30 transform scale-105"
+        : "bg-white border border-neutral-300 text-gray-700 hover:border-[#E46356]/50 hover:bg-gray-50 hover:shadow-md"
+        }`}
     >
       {label}
     </button>
@@ -2142,9 +2141,8 @@ const Dashboard: React.FC = () => {
         {/* Mode toggle */}
         <div className="flex items-center gap-3 mb-8 flex-wrap bg-white p-5 rounded-xl shadow-md border border-gray-200">
           <span
-            className={`text-sm manrope-medium transition-colors duration-200 ${
-              inputMode === "zip" ? "text-gray-900" : "text-gray-500"
-            }`}
+            className={`text-sm manrope-medium transition-colors duration-200 ${inputMode === "zip" ? "text-gray-900" : "text-gray-500"
+              }`}
           >
             Upload
           </span>
@@ -2160,9 +2158,8 @@ const Dashboard: React.FC = () => {
             <div className="peer h-6 w-11 rounded-full bg-gray-200 shadow-inner after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:bg-white after:shadow-md after:transition-all peer-checked:bg-gradient-to-r peer-checked:from-[#E46356] peer-checked:to-[#B978B2] peer-checked:after:translate-x-full"></div>
           </label>
           <span
-            className={`text-sm manrope-medium transition-colors duration-200 ${
-              inputMode === "single" ? "text-gray-900" : "text-gray-500"
-            }`}
+            className={`text-sm manrope-medium transition-colors duration-200 ${inputMode === "single" ? "text-gray-900" : "text-gray-500"
+              }`}
           >
             Single
           </span>
@@ -2222,453 +2219,477 @@ const Dashboard: React.FC = () => {
               </select>
             </div>
           )}
-          {/* Custom file name input */}
+        {/* Custom file name input */}
+        <div className="flex items-center gap-3 ml-6">
+          <label className="text-sm text-gray-700 manrope-medium">
+            Custom file name
+          </label>
+          <input
+            type="text"
+            value={customFileName}
+            onChange={(e) => setCustomFileName(e.target.value)}
+            placeholder="Optional"
+            className="border border-gray-300 rounded-lg px-4 py-2 text-sm w-40 bg-white hover:border-[#E46356]/50 focus:border-[#E46356] focus:ring-2 focus:ring-[#E46356]/20 transition-all duration-200 outline-none"
+          />
+        </div>
+
+        {/* Convert button for single file mode */}
+        {inputMode === "single" && (
+          <div className="flex items-center gap-3 ml-auto">
+            <button
+              onClick={handleSingleConvert}
+              disabled={isConvertingSingle || !singleSourceCode.trim()}
+              className={`px-6 py-2.5 rounded-lg text-white text-sm transition-all duration-200 font-semibold manrope-medium shadow-md hover:shadow-lg ${isConvertingSingle || !singleSourceCode.trim()
+                ? "bg-gradient-to-r from-[#E46356]/60 to-[#B978B2]/60 cursor-not-allowed"
+                : "bg-gradient-to-r from-[#E46356] to-[#B978B2] hover:from-[#D8554A] hover:to-[#A869A0] transform hover:scale-105"
+                }`}
+            >
+              {isConvertingSingle ? (
+                <span className="inline-flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" /> Converting
+                </span>
+              ) : (
+                "Convert"
+              )}
+            </button>
+          </div>
+        )}
+    </div>
+
+        {/* Content */ }
+  {
+    currentPage === "upload" && (
+      <div className="space-y-6">
+        {/* Connection ID input — only for IDMC Summary -> JSON tab */}
+        {selectedTab === "idmc-to-json" && (
           <div className="flex items-center gap-3 ml-6">
             <label className="text-sm text-gray-700 manrope-medium">
-              Custom file name
+              Connection ID
             </label>
             <input
               type="text"
-              value={customFileName}
-              onChange={(e) => setCustomFileName(e.target.value)}
-              placeholder="Optional"
-              className="border border-gray-300 rounded-lg px-4 py-2 text-sm w-40 bg-white hover:border-[#E46356]/50 focus:border-[#E46356] focus:ring-2 focus:ring-[#E46356]/20 transition-all duration-200 outline-none"
+              value={connectionId}
+              onChange={(e) => setConnectionId(e.target.value)}
+              placeholder="e.g. oracle_prod"
+              className="border border-gray-300 rounded-lg px-4 py-2 text-sm w-48 bg-white hover:border-[#E46356]/50 focus:border-[#E46356] focus:ring-2 focus:ring-[#E46356]/20 transition-all duration-200 outline-none"
             />
           </div>
+        )}
+        {inputMode === "zip" ? (
+          <ZipUploadPanel
+            dragActive={dragActive}
+            onDrag={handleDrag}
+            onDrop={handleDrop}
+            onFileInput={handleFileInput}
+            selectedFile={selectedFile}
+            fileStats={fileStats as any}
+            onStart={
+              selectedTab === "idmc-batch"
+                ? handleBatchIdmcConvert
+                : selectedTab === "batch-human"
+                  ? handleBatchHumanConvert
+                  : selectedTab === "idmc-to-json"
+                    ? handleIdmcToJsonZipConvert
+                    : handleZipConvert
+            }
+            accept={
+              isIdmcToJsonTab
+                ? ".zip,.txt,.bin,.md,.doc,.docx,.json"
+                : selectedTab === "idmc-batch" ||
+                  selectedTab === "batch-human"
+                  ? ".zip,.sh,.bat,.ksh,.bash,.zsh,.cmd,.ps1"
+                  : ".zip,.sql,.txt,.bin,.md,.pls,.pkg,.prc,.fnc,.rs,.redshift"
+            }
+            helpText={
+              isIdmcToJsonTab
+                ? "Supports ZIP files containing IDMC Summary files (.txt, .bin, .md, .doc, .docx, .json)"
+                : selectedTab === "idmc-batch"
+                  ? "Supports ZIP files containing batch scripts (.sh, .bat, .ksh, .bash, .zsh, .cmd, .ps1)"
+                  : selectedTab === "batch-human"
+                    ? "Supports ZIP files containing batch scripts (.sh, .bat, .ksh, .bash, .zsh, .cmd, .ps1)"
+                    : undefined
+            }
+          />
+        ) : (
+          <SingleEditorsPanel
+            singleSourceCode={singleSourceCode}
+            setSingleSourceCode={setSingleSourceCode}
+            singleResult={singleResult}
+            singleOutputs={singleOutputs}
+            onDownload={handleSingleDownload}
+            placeholder={
+              isBatchHuman || selectedTab === "idmc-batch"
+                ? "Paste your batch script here (.sh, .bat, .ksh, .bash, .zsh, .cmd, .ps1)..."
+                : selectedTab === "idmc-to-json"
+                  ? "Paste IDMC mapping summary here (markdown/text format)..."
+                  : isSnowflakeTab
+                    ? "Paste Oracle SQL/PLSQL here..."
+                    : "Paste SQL for IDMC summary here (Oracle/Redshift)..."
+            }
+          />
+        )}
+      </div>
+    )
+  }
 
-          {/* Convert button for single file mode */}
-          {inputMode === "single" && (
-            <div className="flex items-center gap-3 ml-auto">
-              <button
-                onClick={handleSingleConvert}
-                disabled={isConvertingSingle || !singleSourceCode.trim()}
-                className={`px-6 py-2.5 rounded-lg text-white text-sm transition-all duration-200 font-semibold manrope-medium shadow-md hover:shadow-lg ${
-                  isConvertingSingle || !singleSourceCode.trim()
-                    ? "bg-gradient-to-r from-[#E46356]/60 to-[#B978B2]/60 cursor-not-allowed"
-                    : "bg-gradient-to-r from-[#E46356] to-[#B978B2] hover:from-[#D8554A] hover:to-[#A869A0] transform hover:scale-105"
-                }`}
-              >
-                {isConvertingSingle ? (
-                  <span className="inline-flex items-center gap-2">
-                    <Loader2 className="w-4 h-4 animate-spin" /> Converting
+  {/* WebSocket progress overlay - only shows for ZIP conversions, not single file */ }
+  {
+    inputMode === "zip" && showZipOverlay && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-md animate-fadeIn">
+        <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 p-10 sm:p-12 w-11/12 max-w-2xl">
+          <div className="flex flex-col text-center items-center gap-4">
+            <div className="flex justify-center items-center h-20 w-20 rounded-full bg-gradient-to-br from-blue-50 to-cyan-50 shadow-lg mb-2">
+              <img
+                src={
+                  progress < 30
+                    ? analysing
+                    : progress < 80
+                      ? processing
+                      : done
+                }
+                className="h-10"
+              />
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-4 mb-4 overflow-hidden shadow-inner">
+              <div
+                className="bg-[linear-gradient(90.04deg,_#E46356_0.1%,_#B978B2_25.01%,_#70CBCF_49.91%,_#E7E62A_99.73%)] h-4 rounded-full transition-all duration-300 shadow-sm"
+                style={{ width: `${Math.max(progress, 1)}%` }}
+              />
+            </div>
+            <div className="flex flex-col items-center gap-2">
+              <p className="text-sm font-semibold text-gray-800 manrope-semibold">
+                {Math.round(Math.max(progress, 1))}% Complete
+                {totalFilesCount > 0 && (
+                  <span className="text-gray-600 font-normal">
+                    {" "}
+                    · {filesConvertedCount}/{totalFilesCount} files
                   </span>
-                ) : (
-                  "Convert"
                 )}
-              </button>
+                {(elapsedMs !== null || etaMs !== null) && (
+                  <span className="text-gray-600 font-normal">
+                    {" "}
+                    ·{" "}
+                    {elapsedMs !== null
+                      ? `elapsed ${Math.max(
+                        0,
+                        Math.round(elapsedMs / 1000)
+                      )}s`
+                      : ""}
+                    {etaMs !== null
+                      ? `${elapsedMs !== null ? " · " : ""}ETA ${Math.max(
+                        0,
+                        Math.round(etaMs / 1000)
+                      )}s`
+                      : ""}
+                  </span>
+                )}
+              </p>
+              <h3 className="manrope-semibold text-base sm:text-lg text-gray-900">
+                {currentStepText ||
+                  (progress < 30
+                    ? "Initializing..."
+                    : progress < 80
+                      ? "Processing files..."
+                      : "Finalizing...")}
+              </h3>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  {/* Simple processing overlay - only show when WebSocket overlay is NOT active */ }
+  {
+    isProcessing && !showZipOverlay && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-md animate-fadeIn">
+        <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 p-10 sm:p-12 max-w-xl w-full text-center">
+          <div className="h-20 w-20 mx-auto mb-6 rounded-full bg-gradient-to-br from-purple-50 to-pink-50 flex items-center justify-center">
+            <Loader2 className="w-12 h-12 text-[#B978B2] animate-spin" />
+          </div>
+          <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mb-3 manrope-bold">
+            Analyzing dependencies...
+          </h3>
+          <p className="text-gray-600 mb-8 manrope-regular">
+            Please wait while we analyze your code...
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  {/* Result */ }
+  {
+    currentPage === "result" && convertedFile && (
+      <div className="space-y-6">
+        <div className="flex flex-col items-center">
+          <div className="flex flex-col sm:flex-row items-center max-w-4xl bg-gradient-to-br from-white to-gray-50/50 justify-center mb-8 gap-6 p-12 shadow-xl rounded-2xl border border-gray-100">
+            <div className="flex flex-col justify-center items-center gap-4">
+              <div className="h-20 w-20 rounded-full bg-gradient-to-br from-green-100 to-emerald-100 flex items-center justify-center shadow-lg">
+                <img src={FinalSuccess} alt="final" className="h-12" />
+              </div>
+              <div className="text-center">
+                <h3 className="text-3xl font-bold text-gray-900 mb-2 manrope-bold">
+                  Conversion Complete!
+                </h3>
+                <p className="text-lg text-gray-600 manrope-regular">
+                  Your files are ready for download.
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="flex gap-4 min-w-xl ml-[-10px]">
+            <button
+              onClick={() => setShowPreview(!showPreview)}
+              className="flex-1 sm:flex-none px-6 py-3 w-[40%] bg-white border-2 border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 hover:border-gray-300 hover:shadow-md transition-all duration-200 font-medium flex items-center justify-center gap-2 manrope-medium"
+            >
+              <Eye className="w-5 h-5" />
+              {showPreview ? "Hide" : "Preview"}
+            </button>
+            <button
+              onClick={handleReset}
+              className="flex-1 sm:flex-none px-6 py-3 w-[30%] border-2 border-[#E46356] text-[#E46356] rounded-xl hover:bg-[#E46356] hover:text-white transition-all duration-200 font-medium flex items-center justify-center gap-2 manrope-medium shadow-sm hover:shadow-md"
+            >
+              <IoIosRepeat className="w-5 h-5" />
+              Reconvert
+            </button>
+            <button
+              onClick={handleDownload}
+              className="flex-1 sm:flex-none px-6 py-3 w-[30%] bg-gradient-to-r from-[#E46356] to-[#B978B2] text-white rounded-xl hover:from-[#D8554A] hover:to-[#A869A0] transition-all duration-200 font-medium flex items-center justify-center gap-2 shadow-lg shadow-[#E46356]/30 hover:shadow-xl hover:shadow-[#E46356]/40 transform hover:scale-105 manrope-medium"
+            >
+              <Download className="w-5 h-5" />
+              Download
+            </button>
+          </div>
+
+          {/* Inline side-by-side preview removed; content shown in the Preview modal */}
+
+          {/* Preview modal for converted files if available */}
+          {showPreview && convertedFile && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-md px-4 animate-fadeIn">
+              <div className="relative bg-white rounded-2xl shadow-2xl border border-gray-200 w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
+                {/* Modal Header */}
+                <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-gradient-to-r from-gray-50 to-white">
+                  <div>
+                    <h3 className="text-2xl font-bold text-gray-900 manrope-bold">
+                      Preview
+                    </h3>
+                    <p className="text-sm text-gray-600 mt-1 manrope-regular">
+                      Review original and converted outputs
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setShowPreview(false)}
+                    className="h-10 w-10 rounded-lg flex items-center justify-center text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-all duration-200 text-xl font-semibold"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {/* Modal Content */}
+                <div className="overflow-y-auto p-6 flex-1">
+                  <div className="grid lg:grid-cols-2 gap-6">
+                    <div className="bg-gradient-to-br from-gray-50 to-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                      <div className="flex items-center gap-3 mb-0 p-4 bg-gradient-to-r from-blue-50 to-cyan-50 border-b border-gray-200">
+                        <div className="h-8 w-8 rounded-lg bg-blue-100 flex items-center justify-center">
+                          <IoCodeSlash className="text-blue-600" />
+                        </div>
+                        <h4 className="font-semibold text-gray-900 manrope-semibold">
+                          Original
+                        </h4>
+                      </div>
+                      <div className="space-y-3 max-h-[55vh] overflow-y-auto p-5">
+                        {!convertedFile?.conversion?.convertedFiles ||
+                          convertedFile.conversion.convertedFiles.length ===
+                          0 ? (
+                          <div className="text-center text-gray-500 py-8">
+                            <p>No original files to display</p>
+                          </div>
+                        ) : (
+                          convertedFile.conversion.convertedFiles.map(
+                            (file, idx) => (
+                              <div
+                                key={idx}
+                                className={`bg-white border-l-4 ${expandedIndex === idx
+                                  ? "border-l-[#70CBCF] shadow-md"
+                                  : "border-gray-300"
+                                  } rounded-lg p-4 mb-4 transition-all duration-200 hover:shadow-sm`}
+                              >
+                                <button
+                                  onClick={() =>
+                                    setExpandedIndex(
+                                      expandedIndex === idx ? null : idx
+                                    )
+                                  }
+                                  className="w-full flex items-center justify-between text-left group"
+                                >
+                                  <p className="font-mono text-sm font-semibold text-gray-800 truncate manrope-medium">
+                                    {file.original}
+                                  </p>
+                                  <span className="text-gray-400 group-hover:text-[#70CBCF] transition-colors duration-200 ml-2">
+                                    {expandedIndex === idx ? (
+                                      <FaChevronUp />
+                                    ) : (
+                                      <FaChevronDown />
+                                    )}
+                                  </span>
+                                </button>
+                                {expandedIndex === idx && (
+                                  <div className="mt-4 animate-fadeIn border-t border-gray-100 pt-3">
+                                    <pre className="text-xs bg-gray-50 border border-gray-200 p-4 rounded-lg overflow-x-auto max-h-40 overflow-y-auto">
+                                      <code className="text-gray-800 font-mono">
+                                        {file.oracleContent}
+                                      </code>
+                                    </pre>
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          )
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="bg-gradient-to-br from-gray-50 to-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                      <div className="flex items-center gap-3 mb-0 p-4 bg-gradient-to-r from-[#E46356] to-[#B978B2] border-b border-[#E46356]/20">
+                        <div className="h-8 w-8 rounded-lg bg-white/20 flex items-center justify-center">
+                          <FaFileLines className="text-white" />
+                        </div>
+                        <h4 className="font-semibold text-white manrope-semibold">
+                          Converted
+                        </h4>
+                      </div>
+                      <div className="space-y-3 max-h-[55vh] overflow-y-auto p-5">
+                        {!convertedFile?.conversion?.convertedFiles ||
+                          convertedFile.conversion.convertedFiles.length ===
+                          0 ? (
+                          <div className="text-center text-gray-500 py-8">
+                            <p>No converted files to display</p>
+                          </div>
+                        ) : (
+                          convertedFile.conversion.convertedFiles.map(
+                            (file, idx) => (
+                              <div
+                                key={idx}
+                                className={`bg-white border-l-4 ${expandedIndex === idx
+                                  ? "border-l-green-500 shadow-md"
+                                  : "border-l-green-200"
+                                  } rounded-lg p-4 mb-4 transition-all duration-200 hover:shadow-sm`}
+                              >
+                                <button
+                                  onClick={() =>
+                                    setExpandedIndex(
+                                      expandedIndex === idx ? null : idx
+                                    )
+                                  }
+                                  className="w-full flex items-center justify-between text-left group"
+                                >
+                                  <p className="font-mono text-sm font-semibold text-gray-800 truncate manrope-medium">
+                                    {file.converted}
+                                  </p>
+                                  <span className="text-gray-400 group-hover:text-green-500 transition-colors duration-200 ml-2">
+                                    {expandedIndex === idx ? (
+                                      <FaChevronUp />
+                                    ) : (
+                                      <FaChevronDown />
+                                    )}
+                                  </span>
+                                </button>
+                                {expandedIndex === idx && (
+                                  <div className="mt-4 animate-fadeIn border-t border-gray-100 pt-3">
+                                    <pre className="text-xs bg-gray-50 border border-gray-200 p-4 rounded-lg overflow-x-auto max-h-40 overflow-y-auto">
+                                      <code className="text-gray-800 font-mono">
+                                        {file.snowflakeContent}
+                                      </code>
+                                    </pre>
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          )
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                {/* Modal Footer */}
+                <div className="flex flex-row items-center justify-center gap-4 p-6 border-t border-gray-200 bg-gray-50">
+                  <button
+                    onClick={() => setCurrentPage("upload")}
+                    className="flex-1 px-6 py-3 border-2 border-[#E46356] text-[#E46356] rounded-xl hover:bg-[#E46356] hover:text-white transition-all duration-200 font-semibold flex items-center justify-center gap-2 shadow-sm hover:shadow-md manrope-medium"
+                  >
+                    <IoIosRepeat className="w-5 h-5" />
+                    Reconvert
+                  </button>
+                  <button
+                    onClick={handleDownload}
+                    className="flex-1 px-6 py-3 bg-gradient-to-r from-[#E46356] to-[#B978B2] text-white rounded-xl hover:from-[#D8554A] hover:to-[#A869A0] transition-all duration-200 font-semibold flex items-center justify-center gap-2 shadow-lg hover:shadow-xl manrope-medium"
+                  >
+                    <Download className="w-5 h-5" />
+                    Download
+                  </button>
+                </div>
+              </div>
             </div>
           )}
         </div>
+      </div>
+    )
+  }
 
-        {/* Content */}
-        {currentPage === "upload" && (
-          <div className="space-y-6">
-            {inputMode === "zip" ? (
-              <ZipUploadPanel
-                dragActive={dragActive}
-                onDrag={handleDrag}
-                onDrop={handleDrop}
-                onFileInput={handleFileInput}
-                selectedFile={selectedFile}
-                fileStats={fileStats as any}
-                onStart={
-                  selectedTab === "idmc-batch"
-                    ? handleBatchIdmcConvert
-                    : selectedTab === "batch-human"
-                    ? handleBatchHumanConvert
-                    : selectedTab === "idmc-to-json"
-                    ? handleIdmcToJsonZipConvert
-                    : handleZipConvert
-                }
-                accept={
-                  isIdmcToJsonTab
-                    ? ".zip,.txt,.bin,.md,.doc,.docx,.json"
-                    : selectedTab === "idmc-batch" ||
-                      selectedTab === "batch-human"
-                    ? ".zip,.sh,.bat,.ksh,.bash,.zsh,.cmd,.ps1"
-                    : ".zip,.sql,.txt,.bin,.md,.pls,.pkg,.prc,.fnc,.rs,.redshift"
-                }
-                helpText={
-                  isIdmcToJsonTab
-                    ? "Supports ZIP files containing IDMC Summary files (.txt, .bin, .md, .doc, .docx, .json)"
-                    : selectedTab === "idmc-batch"
-                    ? "Supports ZIP files containing batch scripts (.sh, .bat, .ksh, .bash, .zsh, .cmd, .ps1)"
-                    : selectedTab === "batch-human"
-                    ? "Supports ZIP files containing batch scripts (.sh, .bat, .ksh, .bash, .zsh, .cmd, .ps1)"
-                    : undefined
-                }
-              />
-            ) : (
-              <SingleEditorsPanel
-                singleSourceCode={singleSourceCode}
-                setSingleSourceCode={setSingleSourceCode}
-                singleResult={singleResult}
-                singleOutputs={singleOutputs}
-                onDownload={handleSingleDownload}
-                placeholder={
-                  isBatchHuman || selectedTab === "idmc-batch"
-                    ? "Paste your batch script here (.sh, .bat, .ksh, .bash, .zsh, .cmd, .ps1)..."
-                    : selectedTab === "idmc-to-json"
-                    ? "Paste IDMC mapping summary here (markdown/text format)..."
-                    : isSnowflakeTab
-                    ? "Paste Oracle SQL/PLSQL here..."
-                    : "Paste SQL for IDMC summary here (Oracle/Redshift)..."
-                }
-              />
-            )}
+  {/* Success Page (used for batch zip if no packaged zip returned) */ }
+  {
+    currentPage === "success" && (
+      <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-12 sm:p-16">
+        <div className="text-center max-w-md mx-auto">
+          <div className="w-24 h-24 bg-gradient-to-br from-green-100 to-emerald-100 rounded-full flex items-center justify-center mx-auto mb-8 shadow-lg">
+            <CheckCircle className="w-14 h-14 text-green-600" />
           </div>
-        )}
+          <h3 className="text-3xl font-bold text-gray-900 mb-4 manrope-bold">
+            Completed!
+          </h3>
+          <p className="text-lg text-gray-600 mb-10 manrope-regular">
+            Your request has been processed successfully.
+          </p>
+          <button
+            onClick={handleReset}
+            className="px-8 py-4 bg-gradient-to-r from-[#E46356] to-[#B978B2] rounded-xl text-white transition-all duration-200 font-semibold flex items-center justify-center gap-2 mx-auto shadow-lg hover:shadow-xl hover:from-[#D8554A] hover:to-[#A869A0] transform hover:scale-105 manrope-medium"
+          >
+            <RefreshCw className="w-5 h-5" />
+            Convert Another
+          </button>
+        </div>
+      </div>
+    )
+  }
 
-        {/* WebSocket progress overlay - only shows for ZIP conversions, not single file */}
-        {inputMode === "zip" && showZipOverlay && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-md animate-fadeIn">
-            <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 p-10 sm:p-12 w-11/12 max-w-2xl">
-              <div className="flex flex-col text-center items-center gap-4">
-                <div className="flex justify-center items-center h-20 w-20 rounded-full bg-gradient-to-br from-blue-50 to-cyan-50 shadow-lg mb-2">
-                  <img
-                    src={
-                      progress < 30
-                        ? analysing
-                        : progress < 80
-                        ? processing
-                        : done
-                    }
-                    className="h-10"
-                  />
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-4 mb-4 overflow-hidden shadow-inner">
-                  <div
-                    className="bg-[linear-gradient(90.04deg,_#E46356_0.1%,_#B978B2_25.01%,_#70CBCF_49.91%,_#E7E62A_99.73%)] h-4 rounded-full transition-all duration-300 shadow-sm"
-                    style={{ width: `${Math.max(progress, 1)}%` }}
-                  />
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <p className="text-sm font-semibold text-gray-800 manrope-semibold">
-                    {Math.round(Math.max(progress, 1))}% Complete
-                    {totalFilesCount > 0 && (
-                      <span className="text-gray-600 font-normal">
-                        {" "}
-                        · {filesConvertedCount}/{totalFilesCount} files
-                      </span>
-                    )}
-                    {(elapsedMs !== null || etaMs !== null) && (
-                      <span className="text-gray-600 font-normal">
-                        {" "}
-                        ·{" "}
-                        {elapsedMs !== null
-                          ? `elapsed ${Math.max(
-                              0,
-                              Math.round(elapsedMs / 1000)
-                            )}s`
-                          : ""}
-                        {etaMs !== null
-                          ? `${elapsedMs !== null ? " · " : ""}ETA ${Math.max(
-                              0,
-                              Math.round(etaMs / 1000)
-                            )}s`
-                          : ""}
-                      </span>
-                    )}
-                  </p>
-                  <h3 className="manrope-semibold text-base sm:text-lg text-gray-900">
-                    {currentStepText ||
-                      (progress < 30
-                        ? "Initializing..."
-                        : progress < 80
-                        ? "Processing files..."
-                        : "Finalizing...")}
-                  </h3>
-                </div>
-              </div>
-            </div>
+  {/* Error Page */ }
+  {
+    currentPage === "error" && (
+      <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-12 sm:p-16">
+        <div className="text-center max-w-md mx-auto">
+          <div className="w-24 h-24 bg-gradient-to-br from-red-100 to-orange-100 rounded-full flex items-center justify-center mx-auto mb-8 shadow-lg">
+            <AlertCircle className="w-14 h-14 text-red-600" />
           </div>
-        )}
-
-        {/* Simple processing overlay - only show when WebSocket overlay is NOT active */}
-        {isProcessing && !showZipOverlay && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-md animate-fadeIn">
-            <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 p-10 sm:p-12 max-w-xl w-full text-center">
-              <div className="h-20 w-20 mx-auto mb-6 rounded-full bg-gradient-to-br from-purple-50 to-pink-50 flex items-center justify-center">
-                <Loader2 className="w-12 h-12 text-[#B978B2] animate-spin" />
-              </div>
-              <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mb-3 manrope-bold">
-                Analyzing dependencies...
-              </h3>
-              <p className="text-gray-600 mb-8 manrope-regular">
-                Please wait while we analyze your code...
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* Result */}
-        {currentPage === "result" && convertedFile && (
-          <div className="space-y-6">
-            <div className="flex flex-col items-center">
-              <div className="flex flex-col sm:flex-row items-center max-w-4xl bg-gradient-to-br from-white to-gray-50/50 justify-center mb-8 gap-6 p-12 shadow-xl rounded-2xl border border-gray-100">
-                <div className="flex flex-col justify-center items-center gap-4">
-                  <div className="h-20 w-20 rounded-full bg-gradient-to-br from-green-100 to-emerald-100 flex items-center justify-center shadow-lg">
-                    <img src={FinalSuccess} alt="final" className="h-12" />
-                  </div>
-                  <div className="text-center">
-                    <h3 className="text-3xl font-bold text-gray-900 mb-2 manrope-bold">
-                      Conversion Complete!
-                    </h3>
-                    <p className="text-lg text-gray-600 manrope-regular">
-                      Your files are ready for download.
-                    </p>
-                  </div>
-                </div>
-              </div>
-              <div className="flex gap-4 min-w-xl ml-[-10px]">
-                <button
-                  onClick={() => setShowPreview(!showPreview)}
-                  className="flex-1 sm:flex-none px-6 py-3 w-[40%] bg-white border-2 border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 hover:border-gray-300 hover:shadow-md transition-all duration-200 font-medium flex items-center justify-center gap-2 manrope-medium"
-                >
-                  <Eye className="w-5 h-5" />
-                  {showPreview ? "Hide" : "Preview"}
-                </button>
-                <button
-                  onClick={handleReset}
-                  className="flex-1 sm:flex-none px-6 py-3 w-[30%] border-2 border-[#E46356] text-[#E46356] rounded-xl hover:bg-[#E46356] hover:text-white transition-all duration-200 font-medium flex items-center justify-center gap-2 manrope-medium shadow-sm hover:shadow-md"
-                >
-                  <IoIosRepeat className="w-5 h-5" />
-                  Reconvert
-                </button>
-                <button
-                  onClick={handleDownload}
-                  className="flex-1 sm:flex-none px-6 py-3 w-[30%] bg-gradient-to-r from-[#E46356] to-[#B978B2] text-white rounded-xl hover:from-[#D8554A] hover:to-[#A869A0] transition-all duration-200 font-medium flex items-center justify-center gap-2 shadow-lg shadow-[#E46356]/30 hover:shadow-xl hover:shadow-[#E46356]/40 transform hover:scale-105 manrope-medium"
-                >
-                  <Download className="w-5 h-5" />
-                  Download
-                </button>
-              </div>
-
-              {/* Inline side-by-side preview removed; content shown in the Preview modal */}
-
-              {/* Preview modal for converted files if available */}
-              {showPreview && convertedFile && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-md px-4 animate-fadeIn">
-                  <div className="relative bg-white rounded-2xl shadow-2xl border border-gray-200 w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
-                    {/* Modal Header */}
-                    <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-gradient-to-r from-gray-50 to-white">
-                      <div>
-                        <h3 className="text-2xl font-bold text-gray-900 manrope-bold">
-                          Preview
-                        </h3>
-                        <p className="text-sm text-gray-600 mt-1 manrope-regular">
-                          Review original and converted outputs
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => setShowPreview(false)}
-                        className="h-10 w-10 rounded-lg flex items-center justify-center text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-all duration-200 text-xl font-semibold"
-                      >
-                        ✕
-                      </button>
-                    </div>
-
-                    {/* Modal Content */}
-                    <div className="overflow-y-auto p-6 flex-1">
-                      <div className="grid lg:grid-cols-2 gap-6">
-                        <div className="bg-gradient-to-br from-gray-50 to-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                          <div className="flex items-center gap-3 mb-0 p-4 bg-gradient-to-r from-blue-50 to-cyan-50 border-b border-gray-200">
-                            <div className="h-8 w-8 rounded-lg bg-blue-100 flex items-center justify-center">
-                              <IoCodeSlash className="text-blue-600" />
-                            </div>
-                            <h4 className="font-semibold text-gray-900 manrope-semibold">
-                              Original
-                            </h4>
-                          </div>
-                          <div className="space-y-3 max-h-[55vh] overflow-y-auto p-5">
-                            {!convertedFile?.conversion?.convertedFiles ||
-                            convertedFile.conversion.convertedFiles.length ===
-                              0 ? (
-                              <div className="text-center text-gray-500 py-8">
-                                <p>No original files to display</p>
-                              </div>
-                            ) : (
-                              convertedFile.conversion.convertedFiles.map(
-                                (file, idx) => (
-                                  <div
-                                    key={idx}
-                                    className={`bg-white border-l-4 ${
-                                      expandedIndex === idx
-                                        ? "border-l-[#70CBCF] shadow-md"
-                                        : "border-gray-300"
-                                    } rounded-lg p-4 mb-4 transition-all duration-200 hover:shadow-sm`}
-                                  >
-                                    <button
-                                      onClick={() =>
-                                        setExpandedIndex(
-                                          expandedIndex === idx ? null : idx
-                                        )
-                                      }
-                                      className="w-full flex items-center justify-between text-left group"
-                                    >
-                                      <p className="font-mono text-sm font-semibold text-gray-800 truncate manrope-medium">
-                                        {file.original}
-                                      </p>
-                                      <span className="text-gray-400 group-hover:text-[#70CBCF] transition-colors duration-200 ml-2">
-                                        {expandedIndex === idx ? (
-                                          <FaChevronUp />
-                                        ) : (
-                                          <FaChevronDown />
-                                        )}
-                                      </span>
-                                    </button>
-                                    {expandedIndex === idx && (
-                                      <div className="mt-4 animate-fadeIn border-t border-gray-100 pt-3">
-                                        <pre className="text-xs bg-gray-50 border border-gray-200 p-4 rounded-lg overflow-x-auto max-h-40 overflow-y-auto">
-                                          <code className="text-gray-800 font-mono">
-                                            {file.oracleContent}
-                                          </code>
-                                        </pre>
-                                      </div>
-                                    )}
-                                  </div>
-                                )
-                              )
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="bg-gradient-to-br from-gray-50 to-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                          <div className="flex items-center gap-3 mb-0 p-4 bg-gradient-to-r from-[#E46356] to-[#B978B2] border-b border-[#E46356]/20">
-                            <div className="h-8 w-8 rounded-lg bg-white/20 flex items-center justify-center">
-                              <FaFileLines className="text-white" />
-                            </div>
-                            <h4 className="font-semibold text-white manrope-semibold">
-                              Converted
-                            </h4>
-                          </div>
-                          <div className="space-y-3 max-h-[55vh] overflow-y-auto p-5">
-                            {!convertedFile?.conversion?.convertedFiles ||
-                            convertedFile.conversion.convertedFiles.length ===
-                              0 ? (
-                              <div className="text-center text-gray-500 py-8">
-                                <p>No converted files to display</p>
-                              </div>
-                            ) : (
-                              convertedFile.conversion.convertedFiles.map(
-                                (file, idx) => (
-                                  <div
-                                    key={idx}
-                                    className={`bg-white border-l-4 ${
-                                      expandedIndex === idx
-                                        ? "border-l-green-500 shadow-md"
-                                        : "border-l-green-200"
-                                    } rounded-lg p-4 mb-4 transition-all duration-200 hover:shadow-sm`}
-                                  >
-                                    <button
-                                      onClick={() =>
-                                        setExpandedIndex(
-                                          expandedIndex === idx ? null : idx
-                                        )
-                                      }
-                                      className="w-full flex items-center justify-between text-left group"
-                                    >
-                                      <p className="font-mono text-sm font-semibold text-gray-800 truncate manrope-medium">
-                                        {file.converted}
-                                      </p>
-                                      <span className="text-gray-400 group-hover:text-green-500 transition-colors duration-200 ml-2">
-                                        {expandedIndex === idx ? (
-                                          <FaChevronUp />
-                                        ) : (
-                                          <FaChevronDown />
-                                        )}
-                                      </span>
-                                    </button>
-                                    {expandedIndex === idx && (
-                                      <div className="mt-4 animate-fadeIn border-t border-gray-100 pt-3">
-                                        <pre className="text-xs bg-gray-50 border border-gray-200 p-4 rounded-lg overflow-x-auto max-h-40 overflow-y-auto">
-                                          <code className="text-gray-800 font-mono">
-                                            {file.snowflakeContent}
-                                          </code>
-                                        </pre>
-                                      </div>
-                                    )}
-                                  </div>
-                                )
-                              )
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    {/* Modal Footer */}
-                    <div className="flex flex-row items-center justify-center gap-4 p-6 border-t border-gray-200 bg-gray-50">
-                      <button
-                        onClick={() => setCurrentPage("upload")}
-                        className="flex-1 px-6 py-3 border-2 border-[#E46356] text-[#E46356] rounded-xl hover:bg-[#E46356] hover:text-white transition-all duration-200 font-semibold flex items-center justify-center gap-2 shadow-sm hover:shadow-md manrope-medium"
-                      >
-                        <IoIosRepeat className="w-5 h-5" />
-                        Reconvert
-                      </button>
-                      <button
-                        onClick={handleDownload}
-                        className="flex-1 px-6 py-3 bg-gradient-to-r from-[#E46356] to-[#B978B2] text-white rounded-xl hover:from-[#D8554A] hover:to-[#A869A0] transition-all duration-200 font-semibold flex items-center justify-center gap-2 shadow-lg hover:shadow-xl manrope-medium"
-                      >
-                        <Download className="w-5 h-5" />
-                        Download
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Success Page (used for batch zip if no packaged zip returned) */}
-        {currentPage === "success" && (
-          <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-12 sm:p-16">
-            <div className="text-center max-w-md mx-auto">
-              <div className="w-24 h-24 bg-gradient-to-br from-green-100 to-emerald-100 rounded-full flex items-center justify-center mx-auto mb-8 shadow-lg">
-                <CheckCircle className="w-14 h-14 text-green-600" />
-              </div>
-              <h3 className="text-3xl font-bold text-gray-900 mb-4 manrope-bold">
-                Completed!
-              </h3>
-              <p className="text-lg text-gray-600 mb-10 manrope-regular">
-                Your request has been processed successfully.
-              </p>
-              <button
-                onClick={handleReset}
-                className="px-8 py-4 bg-gradient-to-r from-[#E46356] to-[#B978B2] rounded-xl text-white transition-all duration-200 font-semibold flex items-center justify-center gap-2 mx-auto shadow-lg hover:shadow-xl hover:from-[#D8554A] hover:to-[#A869A0] transform hover:scale-105 manrope-medium"
-              >
-                <RefreshCw className="w-5 h-5" />
-                Convert Another
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Error Page */}
-        {currentPage === "error" && (
-          <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-12 sm:p-16">
-            <div className="text-center max-w-md mx-auto">
-              <div className="w-24 h-24 bg-gradient-to-br from-red-100 to-orange-100 rounded-full flex items-center justify-center mx-auto mb-8 shadow-lg">
-                <AlertCircle className="w-14 h-14 text-red-600" />
-              </div>
-              <h3 className="text-3xl font-bold text-gray-900 mb-4 manrope-bold">
-                Something Went Wrong
-              </h3>
-              <p className="text-lg text-gray-600 mb-10 manrope-regular bg-red-50 border border-red-100 rounded-lg p-4">
-                {errorMessage}
-              </p>
-              <button
-                onClick={handleReset}
-                className="px-8 py-4 bg-gradient-to-r from-[#E46356] to-[#B978B2] rounded-xl text-white transition-all duration-200 font-semibold flex items-center justify-center gap-2 mx-auto shadow-lg hover:shadow-xl hover:from-[#D8554A] hover:to-[#A869A0] transform hover:scale-105 manrope-medium"
-              >
-                <RefreshCw className="w-5 h-5" />
-                Try Again
-              </button>
-            </div>
-          </div>
-        )}
-      </main>
-    </div>
+          <h3 className="text-3xl font-bold text-gray-900 mb-4 manrope-bold">
+            Something Went Wrong
+          </h3>
+          <p className="text-lg text-gray-600 mb-10 manrope-regular bg-red-50 border border-red-100 rounded-lg p-4">
+            {errorMessage}
+          </p>
+          <button
+            onClick={handleReset}
+            className="px-8 py-4 bg-gradient-to-r from-[#E46356] to-[#B978B2] rounded-xl text-white transition-all duration-200 font-semibold flex items-center justify-center gap-2 mx-auto shadow-lg hover:shadow-xl hover:from-[#D8554A] hover:to-[#A869A0] transform hover:scale-105 manrope-medium"
+          >
+            <RefreshCw className="w-5 h-5" />
+            Try Again
+          </button>
+        </div>
+      </div>
+    )
+  }
+      </main >
+    </div >
   );
 };
 
