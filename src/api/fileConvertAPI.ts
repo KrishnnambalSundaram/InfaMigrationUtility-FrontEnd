@@ -401,13 +401,15 @@ export type IdmcSummaryOutputFormat = 'bin' | 'txt' | 'doc';
 export interface IdmcSummaryToJsonSingleRequest {
   sourceCode: string;
   fileName?: string;
-  customFileName?: string; // Optional: custom output file name
-  outputFormat?: IdmcSummaryOutputFormat; // Default: "bin"
+  customFileName?: string;
+  outputFormat?: IdmcSummaryOutputFormat;
+  connectionId?: string;
 }
 
 export interface IdmcSummaryToJsonZipRequest {
   zipFilePath: string;
-  customFileName?: string; // Optional: custom output ZIP name
+  customFileName?: string;
+  connectionId?: string;
 }
 
 export type IdmcSummaryToJsonRequest = IdmcSummaryToJsonSingleRequest | IdmcSummaryToJsonZipRequest;

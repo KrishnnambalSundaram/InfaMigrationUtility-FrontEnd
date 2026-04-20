@@ -1630,6 +1630,7 @@ const Dashboard: React.FC = () => {
       // Call API endpoint: POST /api/idmc/summary-to-json
       const idmcToJsonPayload: any = {
         zipFilePath: uploadedFile.path,
+        connectionId: connectionId.trim() || undefined,
       };
       if (customFileName && customFileName.trim()) {
         idmcToJsonPayload.customFileName = customFileName.trim();
@@ -1974,6 +1975,7 @@ const Dashboard: React.FC = () => {
           sourceCode: singleSourceCode,
           fileName: defaultFileName,
           outputFormat: idmcToJsonOutputFormat,
+          connectionId: connectionId.trim() || undefined,
         };
         res = await idmcSummaryToJson(idmcToJsonPayload);
         jobId = (res as any)?.jobId;
